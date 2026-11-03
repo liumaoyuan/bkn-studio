@@ -7,7 +7,7 @@
 
 export const appEnUS = {
   app: {
-    title: "OpenBKN",
+    title: "九格多源本体构建系统",
     subtitle: "Standalone-first admin frontend project",
   },
 } as const;

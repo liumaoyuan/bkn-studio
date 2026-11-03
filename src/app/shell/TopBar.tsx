@@ -26,7 +26,6 @@ import { useLocation, useMatches, useNavigate, useParams } from "react-router-do
 
 import { getConsoleNavTrail } from "@/app/shell/console-navigation";
 import { useResolvedTheme, useToggleTheme } from "@/app/theme/theme-context";
-import openBknLogo from "@/assets/brand/openbkn-logo-compact.webp";
 import type { AppRouteHandle } from "@/app/shell/route-meta";
 import { logout } from "@/framework/auth/oauth";
 import { useRuntimeConfig, useUpdateLocale } from "@/framework/context/use-runtime-config";
@@ -309,7 +308,7 @@ export function TopBar() {
           title={t("shell.items.home")}
           type="button"
         >
-          <img className="console-brand-logo" src={openBknLogo} alt={t("app.title")} />
+          <span className="console-brand-text">{t("app.title")}</span>
         </button>
         <div className="console-brand-row">
           {trail.length > 0 ? (

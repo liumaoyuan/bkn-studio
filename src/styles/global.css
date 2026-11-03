@@ -218,45 +218,117 @@ blockquote {
 .console-brand {
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 22px;
   min-width: 0;
 }
 
 .console-brand-home {
+  position: relative;
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  padding: 0;
-  border: none;
-  border-radius: 10px;
-  background: none;
+  min-height: 52px;
+  padding: 5px 16px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--color-primary-600) 18%, var(--color-border));
+  border-radius: 16px;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--color-primary-100) 78%, var(--color-bg-surface)),
+    var(--color-bg-surface) 68%
+  );
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #ffffff 58%, transparent),
+    0 8px 22px color-mix(in srgb, var(--color-primary-700) 8%, transparent);
   cursor: pointer;
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.console-brand-home:hover {
+  border-color: color-mix(in srgb, var(--color-primary-600) 38%, var(--color-border));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #ffffff 66%, transparent),
+    0 10px 26px color-mix(in srgb, var(--color-primary-700) 13%, transparent);
+  transform: translateY(-1px);
+}
+
+.console-brand-home:active {
+  transform: translateY(0);
 }
 
 .console-brand-home:focus-visible {
   outline: 2px solid var(--color-primary-600);
-  outline-offset: 2px;
+  outline-offset: 3px;
 }
 
-.console-brand-logo {
-  display: block;
-  width: 184px;
-  height: 48px;
+.console-brand-text {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
   flex: 0 0 auto;
-  object-fit: contain;
-  object-position: left center;
+  background: linear-gradient(
+    92deg,
+    var(--color-primary-900) 0%,
+    var(--color-primary-600) 66%,
+    var(--color-text-accent) 100%
+  );
+  background-clip: text;
+  color: transparent;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.035em;
+  line-height: 1.25;
+  white-space: nowrap;
+  -webkit-background-clip: text;
 }
 
-:root[data-theme="dark"] .console-brand-logo {
-  filter: brightness(0) invert(1);
+:root[data-theme="dark"] .console-brand-home {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--color-primary-100) 88%, var(--color-bg-surface)),
+    var(--color-bg-surface) 72%
+  );
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, #ffffff 8%, transparent),
+    0 8px 22px color-mix(in srgb, #000000 22%, transparent);
+}
+
+:root[data-theme="dark"] .console-brand-text {
+  background: linear-gradient(
+    92deg,
+    var(--color-text-primary) 0%,
+    var(--color-primary-700) 58%,
+    var(--color-text-accent) 100%
+  );
+  background-clip: text;
+  -webkit-background-clip: text;
 }
 
 .console-brand-row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 18px;
   flex-wrap: wrap;
   min-width: 0;
+}
+
+.console-brand-row:not(:empty) {
+  padding-left: 18px;
+}
+
+.console-brand-row:not(:empty)::before {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 1px;
+  height: 28px;
+  background: linear-gradient(transparent, var(--color-border), transparent);
+  content: "";
+  transform: translateY(-50%);
 }
 
 .console-brand-title {
@@ -1500,6 +1572,27 @@ blockquote {
     flex-direction: column;
     align-items: flex-start;
     padding: 16px;
+  }
+
+  .console-brand {
+    width: 100%;
+    gap: 12px;
+  }
+
+  .console-brand-home {
+    max-width: 100%;
+    min-height: 48px;
+    padding: 4px 12px 4px 14px;
+  }
+
+  .console-brand-text {
+    min-height: 36px;
+    font-size: 18px;
+    letter-spacing: 0.02em;
+  }
+
+  .console-brand-row:not(:empty) {
+    padding-left: 12px;
   }
 
   .console-topbar-actions {
