@@ -12,6 +12,7 @@ import { RouteLoading } from "@/app/router/RouteLoading";
 import { CAPABILITIES } from "@/framework/entitlement/capabilities";
 import { RequireEdition } from "@/framework/entitlement/RequireEdition";
 import type { AppRouteContribution } from "@/app/router/types";
+import { COMMERCIAL_EDITIONS_ENABLED } from "@/framework/entitlement/product-edition-policy";
 
 const BusinessProvenancePage = lazy(async () => {
   const module = await import("@/modules/bkn-trace/pages/BusinessProvenancePage");
@@ -35,25 +36,29 @@ function withRouteLoading(element: ReactNode) {
 }
 
 export const bknTraceRoutes: RouteObject[] = [
-  {
-    path: "observability/business-provenance",
-    handle: {
-      console: {
-        descriptionKey: "bknTrace.businessProvenance.description",
-        menuKey: "business-provenance",
-        titleKey: "bknTrace.businessProvenance.title",
-      },
-    },
-    element: (
-      <RequireEdition
-        capability={CAPABILITIES.BUSINESS_PROVENANCE}
-        minEdition="enterprise"
-        mountLockedContent={false}
-      >
-        {withRouteLoading(<BusinessProvenancePage />)}
-      </RequireEdition>
-    ),
-  },
+  ...(COMMERCIAL_EDITIONS_ENABLED
+    ? [
+        {
+          path: "observability/business-provenance",
+          handle: {
+            console: {
+              descriptionKey: "bknTrace.businessProvenance.description",
+              menuKey: "business-provenance",
+              titleKey: "bknTrace.businessProvenance.title",
+            },
+          },
+          element: (
+            <RequireEdition
+              capability={CAPABILITIES.BUSINESS_PROVENANCE}
+              minEdition="enterprise"
+              mountLockedContent={false}
+            >
+              {withRouteLoading(<BusinessProvenancePage />)}
+            </RequireEdition>
+          ),
+        },
+      ]
+    : []),
   {
     path: "observability/traces",
     handle: {
@@ -89,7 +94,16 @@ export const bknTraceRoutes: RouteObject[] = [
   },
   {
     path: "system/bkn-trace",
-    element: <Navigate replace to="/observability/business-provenance" />,
+    element: (
+      <Navigate
+        replace
+        to={
+          COMMERCIAL_EDITIONS_ENABLED
+            ? "/observability/business-provenance"
+            : "/observability/traces"
+        }
+      />
+    ),
   },
 ];
 

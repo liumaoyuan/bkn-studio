@@ -8,6 +8,7 @@
 import type { RouteObject } from "react-router-dom";
 
 import type { AppRouteContribution } from "@/app/router/types";
+import { COMMERCIAL_EDITIONS_ENABLED } from "@/framework/entitlement/product-edition-policy";
 import { accountRouteContribution } from "@/modules/account/routes";
 import { apiKeysRouteContribution } from "@/modules/api-keys/routes";
 import { bknTraceRouteContribution } from "@/modules/bkn-trace/routes";
@@ -31,7 +32,7 @@ const routeContributions: AppRouteContribution[] = [
   executionFactoryLabRouteContribution,
   bknTraceRouteContribution,
   systemAdminRouteContribution,
-  subscriptionRouteContribution,
+  ...(COMMERCIAL_EDITIONS_ENABLED ? [subscriptionRouteContribution] : []),
   apiKeysRouteContribution,
   accountRouteContribution,
 ];

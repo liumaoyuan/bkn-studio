@@ -40,7 +40,7 @@ beforeEach(() => {
 });
 
 describe("EditionBadge", () => {
-  it("hides a reported capability badge when the capability is available", () => {
+  it("hides commercial edition badges in the Community-only frontend", () => {
     contextState.snapshot = entitlement({
       capabilities: [CAPABILITIES.RBAC_BASIC],
       edition: "professional",
@@ -54,22 +54,18 @@ describe("EditionBadge", () => {
     expect(screen.queryByText("common.entitlement.editionsShort.professional")).toBeNull();
   });
 
-  it("keeps the badge when the reported capability is unavailable", () => {
+  it("hides a commercial badge even when the backend still reports an enterprise licence", () => {
     contextState.snapshot = entitlement({
-      edition: "professional",
-      extensions: [CAPABILITIES.RBAC_BASIC],
+      edition: "enterprise",
+      extensions: [CAPABILITIES.PERM_OBJECT_LEVEL],
       licensed: true,
       state: "valid",
     });
 
-    render(<EditionBadge capability={CAPABILITIES.RBAC_BASIC} edition="professional" />);
+    render(
+      <EditionBadge alwaysShow capability={CAPABILITIES.PERM_OBJECT_LEVEL} edition="enterprise" />,
+    );
 
-    expect(screen.getByText("common.entitlement.editionsShort.professional")).toBeTruthy();
-  });
-
-  it("keeps the badge while the entitlement snapshot is unknown", () => {
-    render(<EditionBadge capability={CAPABILITIES.RBAC_BASIC} edition="professional" />);
-
-    expect(screen.getByText("common.entitlement.editionsShort.professional")).toBeTruthy();
+    expect(screen.queryByText("common.entitlement.editionsShort.enterprise")).toBeNull();
   });
 });

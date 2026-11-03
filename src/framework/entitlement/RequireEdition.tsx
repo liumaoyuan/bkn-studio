@@ -13,6 +13,10 @@ import { useLocation, useNavigate } from "react-router-dom";
 
 import { EditionBadge } from "@/framework/entitlement/EditionBadge";
 import type { Edition } from "@/framework/entitlement/edition";
+import {
+  COMMERCIAL_EDITIONS_ENABLED,
+  isCommercialEdition,
+} from "@/framework/entitlement/product-edition-policy";
 import { capabilitySatisfied, upgradeReason } from "@/framework/entitlement/upgrade-reason";
 import { useEntitlementContext } from "@/framework/entitlement/use-entitlement";
 import { AppButton } from "@/framework/ui/common/AppButton";
@@ -56,6 +60,16 @@ export function RequireEdition({
   const back = returnTo ? (
     <AppButton onClick={() => void navigate(returnTo)}>{t("common.back")}</AppButton>
   ) : null;
+
+  if (!COMMERCIAL_EDITIONS_ENABLED && isCommercialEdition(minEdition)) {
+    return (
+      <Result
+        status="404"
+        subTitle={t("common.notFoundDescription")}
+        title={t("common.pageNotFound")}
+      />
+    );
+  }
 
   /*
     快照没到不能白屏。null 有两种来路:这一次请求还在飞,以及 fetchEntitlement() 抛错后

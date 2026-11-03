@@ -9,6 +9,10 @@ import { Tooltip } from "antd";
 import { useTranslation } from "react-i18next";
 
 import type { Edition } from "@/framework/entitlement/edition";
+import {
+  COMMERCIAL_EDITIONS_ENABLED,
+  isCommercialEdition,
+} from "@/framework/entitlement/product-edition-policy";
 import { capabilitySatisfied } from "@/framework/entitlement/upgrade-reason";
 import { useEntitlementContext } from "@/framework/entitlement/use-entitlement";
 import { capabilityReportedByEndpoint } from "@/modules/subscription/capability-catalog";
@@ -43,6 +47,10 @@ export function EditionBadge({
   const { t } = useTranslation();
   const { snapshot } = useEntitlementContext();
   const label = t(`common.entitlement.editionsShort.${edition}`);
+
+  if (!COMMERCIAL_EDITIONS_ENABLED && isCommercialEdition(edition)) {
+    return null;
+  }
 
   /*
     徽标闭嘴的条件是**两个都满足**:证够了、镜像里也有。只满足一半时仍要标——客户

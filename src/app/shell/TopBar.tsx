@@ -31,6 +31,7 @@ import { logout } from "@/framework/auth/oauth";
 import { useRuntimeConfig, useUpdateLocale } from "@/framework/context/use-runtime-config";
 import { useEntitlement, useEntitlementContext } from "@/framework/entitlement/use-entitlement";
 import { isCommunityBuild } from "@/framework/entitlement/types";
+import { COMMERCIAL_EDITIONS_ENABLED } from "@/framework/entitlement/product-edition-policy";
 import { APP_VERSION } from "@/framework/runtime/app-version";
 import {
   buildInstallStatusRedirectUrl,
@@ -185,7 +186,7 @@ export function TopBar() {
       from flashing before the real one. Show an upgrade CTA while a higher edition exists; only
       the top industry edition has no upgrade path.
     */
-    if (snapshot) {
+    if (COMMERCIAL_EDITIONS_ENABLED && snapshot) {
       items.push({
         icon: <CrownOutlined />,
         key: "subscription",

@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { EntitlementContext } from "@/framework/entitlement/entitlement-context";
 import { fetchEntitlement } from "@/framework/entitlement/entitlement.service";
+import { applyProductEditionPolicy } from "@/framework/entitlement/product-edition-policy";
 import type { Entitlement } from "@/framework/entitlement/types";
 
 /**
@@ -35,7 +36,7 @@ export function EntitlementProvider({ children }: PropsWithChildren) {
 
   const load = useCallback(async () => {
     try {
-      const next = await fetchEntitlement();
+      const next = applyProductEditionPolicy(await fetchEntitlement());
       if (mounted.current) {
         setSnapshot(next);
       }

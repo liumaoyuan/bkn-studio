@@ -14,6 +14,7 @@ import {
 
 import type { ConsoleNavContribution } from "@/app/shell/navigation/types";
 import { CAPABILITIES } from "@/framework/entitlement/capabilities";
+import { COMMERCIAL_EDITIONS_ENABLED } from "@/framework/entitlement/product-edition-policy";
 
 export const bknTraceNavigation: ConsoleNavContribution = {
   afterKey: "general-business-knowledge-network",
@@ -23,17 +24,21 @@ export const bknTraceNavigation: ConsoleNavContribution = {
       labelKey: "shell.items.observability",
       icon: <BranchesOutlined />,
       children: [
-        {
-          key: "business-provenance",
-          labelKey: "shell.items.businessProvenance",
-          // 只标不挡:业务溯源由 bkn-trace 实现,不在 bkn-safe 的装配表里,
-          // /api/safe/v1/capabilities 永远不报这个 key(ee-design.md §6「A 答不了 B」)。
-          // 拿它做 capability 门控会让这一项永久隐藏。
-          paidCapability: CAPABILITIES.BUSINESS_PROVENANCE,
-          paidEdition: "enterprise",
-          icon: <FileSearchOutlined />,
-          path: "/observability/business-provenance",
-        },
+        ...(COMMERCIAL_EDITIONS_ENABLED
+          ? [
+              {
+                key: "business-provenance",
+                labelKey: "shell.items.businessProvenance",
+                // 只标不挡:业务溯源由 bkn-trace 实现,不在 bkn-safe 的装配表里,
+                // /api/safe/v1/capabilities 永远不报这个 key(ee-design.md §6「A 答不了 B」)。
+                // 拿它做 capability 门控会让这一项永久隐藏。
+                paidCapability: CAPABILITIES.BUSINESS_PROVENANCE,
+                paidEdition: "enterprise" as const,
+                icon: <FileSearchOutlined />,
+                path: "/observability/business-provenance",
+              },
+            ]
+          : []),
         {
           key: "trace-analysis",
           labelKey: "shell.items.traceAnalysis",

@@ -7,6 +7,10 @@
 
 import type { PropsWithChildren, ReactNode } from "react";
 
+import {
+  COMMERCIAL_EDITIONS_ENABLED,
+  isCommercialCapability,
+} from "@/framework/entitlement/product-edition-policy";
 import { useCapability } from "@/framework/entitlement/use-entitlement";
 
 type CapabilityGateProps = PropsWithChildren<{
@@ -46,6 +50,10 @@ export function CapabilityGate({
   upgrade,
 }: CapabilityGateProps) {
   const state = useCapability(capability);
+
+  if (!COMMERCIAL_EDITIONS_ENABLED && isCommercialCapability(capability)) {
+    return null;
+  }
 
   if (state === "available") {
     return <>{children}</>;

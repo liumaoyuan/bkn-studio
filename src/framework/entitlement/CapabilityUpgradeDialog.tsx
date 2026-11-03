@@ -12,6 +12,10 @@ import { useNavigate } from "react-router-dom";
 
 import { EditionBadge } from "@/framework/entitlement/EditionBadge";
 import type { Edition } from "@/framework/entitlement/edition";
+import {
+  COMMERCIAL_EDITIONS_ENABLED,
+  isCommercialEdition,
+} from "@/framework/entitlement/product-edition-policy";
 import { useEntitlementContext } from "@/framework/entitlement/use-entitlement";
 import { AppButton } from "@/framework/ui/common/AppButton";
 import { upgradeReason } from "@/framework/entitlement/upgrade-reason";
@@ -53,6 +57,11 @@ export function CapabilityUpgradeDialog({
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { snapshot } = useEntitlementContext();
+
+  if (!COMMERCIAL_EDITIONS_ENABLED && isCommercialEdition(minEdition)) {
+    return null;
+  }
+
   const editionName = t(`common.entitlement.editions.${minEdition}`);
   /** 专业档走紫,企业与行业档走暖金——与版本页的卡片同源。 */
   const tierClass = minEdition === "professional" ? "" : "is-enterprise";

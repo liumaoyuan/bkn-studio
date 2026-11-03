@@ -22,6 +22,7 @@ import { useNavigate } from "react-router-dom";
 
 import { writeTextToClipboard } from "@/framework/compat/clipboard";
 import { useAppServices } from "@/framework/context/use-app-services";
+import { COMMERCIAL_EDITIONS_ENABLED } from "@/framework/entitlement/product-edition-policy";
 import { useRefreshEntitlement } from "@/framework/entitlement/use-entitlement";
 import { PermissionGate } from "@/framework/permission/PermissionGate";
 import { extractRequestErrorMessage } from "@/framework/request/error-message";
@@ -337,14 +338,16 @@ export function LicenseManagementScene() {
             这一页答的是「这张证是什么、怎么导」;买了哪些能力、还能买什么在版本与订阅页。
             两页互为上下文,但那一页在菜单里没有入口,所以这里给一条明路。
           */}
-          <AppButton
-            icon={<CrownOutlined />}
-            onClick={() => {
-              void navigate("/system/subscription");
-            }}
-          >
-            {t("systemAdmin.license.viewSubscription")}
-          </AppButton>
+          {COMMERCIAL_EDITIONS_ENABLED ? (
+            <AppButton
+              icon={<CrownOutlined />}
+              onClick={() => {
+                void navigate("/system/subscription");
+              }}
+            >
+              {t("systemAdmin.license.viewSubscription")}
+            </AppButton>
+          ) : null}
           <AppButton icon={<ReloadOutlined />} loading={loading} onClick={() => void load()}>
             {t("common.refresh")}
           </AppButton>

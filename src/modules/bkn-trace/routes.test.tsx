@@ -19,7 +19,6 @@ describe("bkn-trace module registration", () => {
     expect(bknTraceRouteContribution.moduleId).toBe("bkn-trace");
     expect(bknTraceRouteContribution.routes.map((route) => route.path)).toEqual(
       expect.arrayContaining([
-        "observability/business-provenance",
         "observability/traces",
         "observability/logs",
         "observability/settings",
@@ -32,7 +31,6 @@ describe("bkn-trace module registration", () => {
       labelKey: "shell.items.observability",
     });
     expect(bknTraceNavigation.items[0].children?.map((item) => item.key)).toEqual([
-      "business-provenance",
       "trace-analysis",
       "observability-logs",
       "observability-settings",
@@ -40,6 +38,9 @@ describe("bkn-trace module registration", () => {
     expect(consoleNavigation.map((item) => item.key)).toContain("observability");
     expect(bknTraceNavigation.items[0].children?.map((item) => item.key)).not.toContain(
       "business-provenance-prototype",
+    );
+    expect(bknTraceNavigation.items[0].children?.map((item) => item.key)).not.toContain(
+      "business-provenance",
     );
   });
 
@@ -59,15 +60,21 @@ describe("bkn-trace module registration", () => {
     expect(isValidElement(route?.element) && route.element.type).toBe(Suspense);
   });
 
-  it("does not mount the business provenance preview while enterprise is locked", () => {
-    const route = bknTraceRouteContribution.routes.find(
-      ({ path }) => path === "observability/business-provenance",
-    );
+  it("does not register the enterprise business provenance page", () => {
+    expect(
+      bknTraceRouteContribution.routes.some(
+        ({ path }) => path === "observability/business-provenance",
+      ),
+    ).toBe(false);
+  });
 
-    if (!isValidElement<{ mountLockedContent?: boolean }>(route?.element)) {
-      throw new Error("business provenance route must render an entitlement gate");
+  it("redirects the legacy bkn-trace entry to the free trace analysis page", () => {
+    const route = bknTraceRouteContribution.routes.find(({ path }) => path === "system/bkn-trace");
+
+    if (!isValidElement<{ to?: string }>(route?.element)) {
+      throw new Error("legacy bkn-trace route must render a redirect");
     }
 
-    expect(route.element.props.mountLockedContent).toBe(false);
+    expect(route.element.props.to).toBe("/observability/traces");
   });
 });
