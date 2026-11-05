@@ -7,7 +7,7 @@
 
 export const integrationPart = {
   integration: {
-    title: "对接 OpenBKN 能力",
+    title: "对接九格多源本体构建系统能力",
     description:
       "面向智能体平台和业务系统提供统一调用入口。MCP 用于智能体工具调用，CLI 用于终端与 Agent，SDK 用于 Node.js 服务端集成。",
     modeLabel: "接入方式",
@@ -21,14 +21,14 @@ export const integrationPart = {
     copy: "复制",
     copyFailed: "复制失败，请手动复制代码",
     cli: {
-      guideTitle: "通过 CLI 调用 OpenBKN",
+      guideTitle: "通过 CLI 调用九格多源本体构建系统",
       guideDescription:
         "适用于本地终端、CI/CD 和具备 Shell 能力的 Agent。默认通过 OAuth 账号会话访问平台能力，无需自行实现接口协议。",
       steps: {
         install: "全局安装 @openbkn/bkn-sdk，获得 openbkn 命令。",
-        token: "使用 OpenBKN 账号登录，CLI 会保存并自动刷新 OAuth 会话。",
+        token: "使用九格多源本体构建系统账号登录，CLI 会保存并自动刷新 OAuth 会话。",
         context: "先通过 bkn list 获取知识网络 ID，再按需调用平台或 context 命令。",
-        skill: "为 Agent 安装 OpenBKN Skill 后，可按自然语言选择对应命令。",
+        skill: "为 Agent 安装九格多源本体构建系统 Skill 后，可按自然语言选择对应命令。",
       },
       title: "CLI 调用示例",
       ariaLabel: "CLI 示例",
@@ -36,7 +36,7 @@ export const integrationPart = {
       examples: {
         setup: {
           label: "安装与认证",
-          title: "安装 OpenBKN CLI 并登录账号",
+          title: "安装九格多源本体构建系统 CLI 并登录账号",
           code: `npm install -g @openbkn/bkn-sdk
 
 export BKN_BASE_URL="{{platformOrigin}}"
@@ -67,7 +67,7 @@ openbkn context tools <kn-id>`,
         },
         "agent-skill": {
           label: "Agent Skill",
-          title: "为具备终端能力的 Agent 安装 OpenBKN Skill",
+          title: "为具备终端能力的 Agent 安装九格多源本体构建系统 Skill",
           code: `npm install -g @openbkn/bkn-sdk
 npx skills add openbkn-ai/bkn-sdk@openbkn -g -y
 
@@ -79,12 +79,12 @@ openbkn help all`,
       },
     },
     sdk: {
-      guideTitle: "通过 SDK 集成 OpenBKN",
+      guideTitle: "通过 SDK 集成九格多源本体构建系统",
       guideDescription:
         "适用于 Node.js 服务端项目。SDK 使用账号密码建立并自动刷新 OAuth 会话，同时封装平台请求、MCP 会话、JSON-RPC 调用与响应解析。",
       steps: {
         install: "安装 @openbkn/bkn-sdk。",
-        token: "配置 OpenBKN 账号和密码；SDK 会建立可自动刷新的 OAuth 会话。",
+        token: "配置九格多源本体构建系统账号和密码；SDK 会建立可自动刷新的 OAuth 会话。",
         client: "异步创建已认证客户端，并传入平台地址。",
         tools:
           "先获取知识网络 ID；随后可调用 bkn、resource、vega 或 context 能力，具体范围由账号权限决定。",

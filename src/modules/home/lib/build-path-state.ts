@@ -5,15 +5,14 @@
  * Conditions. See LICENSE for the full text.
  */
 
-export type HomeBuildPath = "engineering" | "platform" | "sample";
+export type HomeBuildPath = "engineering" | "platform";
 export type HomeBuildStage = "environment" | "data" | "model" | "validate";
 
 const PLATFORM_STAGES: HomeBuildStage[] = ["environment", "data", "model", "validate"];
 
 export function readHomeBuildState(searchParams: URLSearchParams) {
   const requestedPath = searchParams.get("path");
-  const path: HomeBuildPath =
-    requestedPath === "platform" || requestedPath === "sample" ? requestedPath : "engineering";
+  const path: HomeBuildPath = requestedPath === "platform" ? "platform" : "engineering";
   const requestedStage = searchParams.get("stage");
   const stage = PLATFORM_STAGES.find((item) => item === requestedStage) ?? "environment";
 
@@ -28,12 +27,6 @@ export function writeHomeBuildState(
 
   if (state.path === "engineering") {
     next.delete("path");
-    next.delete("stage");
-    return next;
-  }
-
-  if (state.path === "sample") {
-    next.set("path", "sample");
     next.delete("stage");
     return next;
   }

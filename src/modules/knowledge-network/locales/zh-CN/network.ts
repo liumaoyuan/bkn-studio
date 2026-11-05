@@ -131,7 +131,8 @@ export const networkPart = {
   importPending: "导入流程会在后续切片中按旧 Vega 体验继续补齐。",
   importSuccess: "导入成功",
   importTitle: "导入知识网络",
-  integrationDescription: "通过 MCP 或 RESTful 将 OpenBKN 能力接入智能体平台和外部系统。",
+  integrationDescription:
+    "通过 MCP 或 RESTful 将九格多源本体构建系统能力接入智能体平台和外部系统。",
   integrationTitle: "知识网络对接",
   copyNetworkIdentifier: "复制知识网络 ID",
   copyNetworkIdentifierFailed: "复制知识网络 ID 失败",

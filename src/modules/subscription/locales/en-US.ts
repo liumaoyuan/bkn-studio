@@ -108,7 +108,8 @@ export const subscriptionEnUS = {
       indexing: "Data discovery, batch indexing and vectorisation",
       localAuth: "Local sign-in with user, department and built-in role management",
       mcpTooling: "Connect, debug and invoke MCP servers, tools and Skills",
-      modelingSurfaces: "Model and manage knowledge networks from BKN Studio, CLI, SDK and Skills",
+      modelingSurfaces:
+        "Model and manage knowledge networks from 九格多源本体构建系统, CLI, SDK and Skills",
       modelingTypes: "Object, relation, action and metric modelling",
       oneClickExperience: "Try it in one click with dynamically loaded official examples",
       queryAndSearch: "Relation queries, path queries and semantic search",
@@ -157,7 +158,7 @@ export const subscriptionEnUS = {
       },
       enterprise: {
         audience:
-          "For organisations running their enterprise AI agents on OpenBKN. Adds SAP HANA connectivity, fine-grained enterprise object permissions and business provenance on top of Professional.",
+          "For organisations running their enterprise AI agents on 九格多源本体构建系统. Adds SAP HANA connectivity, fine-grained enterprise object permissions and business provenance on top of Professional.",
         hanaConnector: "SAP HANA",
         price: "Contact us",
         unit: "Per contract",

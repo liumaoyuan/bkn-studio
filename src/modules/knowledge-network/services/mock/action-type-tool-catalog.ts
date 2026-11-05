@@ -46,12 +46,12 @@ const MOCK_TOOL_BOXES: ActionTypeToolBox[] = [
   {
     boxId: "box-data-understanding",
     boxName: "数据理解工具箱",
-    description: "数据理解 openbkn",
+    description: "九格多源本体构建系统数据理解",
     tools: [
       {
         parameters: [{ name: "dataset_id", required: true, type: "string" }],
         toolId: "openbkn_understand",
-        toolName: "openbkn 数据理解",
+        toolName: "九格多源本体构建系统数据理解",
       },
     ],
   },

@@ -103,7 +103,7 @@ export const subscriptionZhCN = {
       indexing: "数据发现、批量索引与向量化",
       localAuth: "本地登录,用户、部门与内置角色管理",
       mcpTooling: "MCP、工具与 Skill 的接入、调试和调用",
-      modelingSurfaces: "通过 BKN Studio、CLI、SDK 与 Skill 建模并管理知识网络",
+      modelingSurfaces: "通过九格多源本体构建系统、CLI、SDK 与 Skill 建模并管理知识网络",
       modelingTypes: "对象、关系、行动与指标建模",
       oneClickExperience: "支持一键体验，动态加载官方样例",
       queryAndSearch: "关系查询、路径查询与语义检索",
@@ -150,7 +150,7 @@ export const subscriptionZhCN = {
       },
       enterprise: {
         audience:
-          "面向以 OpenBKN 为企业 AI Agent 运行底座的组织,在专业版基础上增加 SAP HANA 数据连接、企业对象细粒度权限和业务溯源。",
+          "面向以九格多源本体构建系统为企业 AI Agent 运行底座的组织,在专业版基础上增加 SAP HANA 数据连接、企业对象细粒度权限和业务溯源。",
         hanaConnector: "SAP HANA",
         price: "洽谈",
         unit: "按合同授权",
@@ -171,6 +171,7 @@ export const subscriptionZhCN = {
     },
     contact: "完整能力对比、服务条款与优惠计划见版本说明;商务咨询 business@openbkn.ai。",
     title: "版本与订阅",
-    subtitle: "BKN 的知识网络与数据能力在所有版本中完整开放;权限边界、审计与合规能力随版本递进。",
+    subtitle:
+      "九格多源本体构建系统的知识网络与数据能力在所有版本中完整开放;权限边界、审计与合规能力随版本递进。",
   },
 } as const;

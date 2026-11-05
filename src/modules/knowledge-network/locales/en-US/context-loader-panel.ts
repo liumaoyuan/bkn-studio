@@ -230,9 +230,9 @@ export const contextLoaderPanelPart = {
       copied: "Server instructions copied",
     },
     mcpConnect: {
-      title: "Let Agents Call OpenBKN Capabilities",
+      title: "Let Agents Call 九格多源本体构建系统 Capabilities",
       description:
-        "This page generates MCP integration config. After copying it into an agent platform, the agent can access OpenBKN retrieval, query, and action capabilities through MCP tools.",
+        "This page generates MCP integration config. After copying it into an agent platform, the agent can access 九格多源本体构建系统 retrieval, query, and action capabilities through MCP tools.",
       stepIssueKey:
         "Issue an API Key in Account Center and put the long-lived bak_ key into the Bearer Key on the right.",
       stepCopyConfig:

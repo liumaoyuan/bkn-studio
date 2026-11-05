@@ -8,6 +8,6 @@
 export const appZhCN = {
   app: {
     title: "九格多源本体构建系统",
-    subtitle: "BKN 平台统一前端项目",
+    subtitle: "九格多源本体构建系统统一前端项目",
   },
 } as const;

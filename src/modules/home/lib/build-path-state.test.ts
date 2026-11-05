@@ -42,16 +42,10 @@ describe("home build path state", () => {
     ).toBe("source=sidebar");
   });
 
-  it("keeps the sample path without a platform stage", () => {
+  it("uses the engineering path when a removed sample path is requested", () => {
     expect(readHomeBuildState(new URLSearchParams("path=sample"))).toEqual({
-      path: "sample",
+      path: "engineering",
       stage: "environment",
     });
-    expect(
-      writeHomeBuildState(new URLSearchParams("source=sidebar&path=platform&stage=model"), {
-        path: "sample",
-        stage: "model",
-      }).toString(),
-    ).toBe("source=sidebar&path=sample");
   });
 });

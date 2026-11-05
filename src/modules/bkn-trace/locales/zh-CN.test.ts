@@ -14,10 +14,10 @@ describe("BKN Trace Chinese business hierarchy", () => {
     expect(bknTraceZhCN.bknTrace.views).toEqual({
       conversations: "业务会话",
       interactions: "交互轮次",
-      requests: "OpenBKN 调用",
+      requests: "系统调用",
     });
     expect(bknTraceZhCN.bknTrace.businessProvenance.description).toContain(
-      "业务会话、交互轮次和 OpenBKN 调用",
+      "业务会话、交互轮次和系统调用",
     );
   });
 

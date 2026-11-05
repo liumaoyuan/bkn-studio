@@ -64,8 +64,8 @@ let mockLicense: LicenseDetail = {
   contractExpiresAt: Math.floor(Date.now() / 1000) + 180 * 86_400,
   customer: {
     email: "ops@example.com",
-    name: "OpenBKN Demo Customer",
-    project: "BKN Studio",
+    name: "九格多源本体构建系统演示客户",
+    project: "九格多源本体构建系统",
   },
   edition: "enterprise",
   // Earlier than the contract end, as on a real certificate renewed in place,

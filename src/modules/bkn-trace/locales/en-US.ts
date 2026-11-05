@@ -455,7 +455,7 @@ export const bknTraceEnUS = {
     },
     businessProvenance: {
       description:
-        "Explain business outcomes and their data, logic, and action evidence by business conversation, interaction turn, and OpenBKN call.",
+        "Explain business outcomes and their data, logic, and action evidence by business conversation, interaction turn, and system call.",
       forbidden: "You cannot view business provenance",
       forbiddenDescription:
         "The current account cannot view business provenance records in this scope.",
@@ -947,7 +947,7 @@ export const bknTraceEnUS = {
         time: "Time",
       },
       description:
-        "Review user and administrator operations on OpenBKN, with exact links to related traces and business provenance.",
+        "Review user and administrator operations on 九格多源本体构建系统, with exact links to related traces and business provenance.",
       emptyAssociated:
         "No operation audit records match the associated identifier in this time range.",
       emptyRange: "No operation audit records exist in this time range.",
@@ -1297,7 +1297,7 @@ export const bknTraceEnUS = {
     incompleteBusiness: "Some business evidence is not yet traceable",
     unnamedAgent: "Unnamed Agent",
     conclusionAtInteraction:
-      "This OpenBKN call records execution facts. View the owning interaction for the final business conclusion.",
+      "This system call records execution facts. View the owning interaction for the final business conclusion.",
     durationUnits: { hour: "h", millisecond: "ms", minute: "min", second: "s" },
     edges: {
       caused_by: "Caused by",
@@ -1395,17 +1395,17 @@ export const bknTraceEnUS = {
       evidenceChain: "Evidence Chain",
       nodeDetails: "Node details",
       relations: "Business relationships",
-      requestDetail: "OpenBKN call details",
-      interactionRequests: "OpenBKN calls in this interaction",
+      requestDetail: "System call details",
+      interactionRequests: "System calls in this interaction",
       interactionContext: "Question and result",
       snapshot: "Snapshot Preview",
       sqlFacts: "SQL query facts",
       traceGraph: "Trace Graph",
       visibility: "Visibility",
     },
-    interactionCallCount: "{{count}} OpenBKN calls",
-    interactionCallCount_one: "{{count}} OpenBKN call",
-    interactionCallCount_other: "{{count}} OpenBKN calls",
+    interactionCallCount: "{{count}} system calls",
+    interactionCallCount_one: "{{count}} system call",
+    interactionCallCount_other: "{{count}} system calls",
     stages: {
       action: "Action and result",
       claim: "Business claim",
@@ -1518,7 +1518,7 @@ export const bknTraceEnUS = {
     views: {
       conversations: "Business conversations",
       interactions: "Interaction turns",
-      requests: "OpenBKN calls",
+      requests: "System calls",
     },
   },
 } as const;

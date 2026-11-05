@@ -74,34 +74,35 @@ export const systemAdminModuleManifest = {
       id: "system-admin.license",
       exportName: "LicenseManagementScene",
       description:
-        "Manage the product license for the current OpenBKN cluster: view state, copy the device fingerprint, import license or activation certificate text, activate online, and remove the license.",
+        "Manage the product license for the current 九格多源本体构建系统 cluster: view state, copy the device fingerprint, import license or activation certificate text, activate online, and remove the license.",
       inputs: [],
     },
     {
       id: "system-admin.oauth-access-origins",
       exportName: "OAuthAccessOriginsScene",
       description:
-        "Manage the browser origins allowed to complete BKN Studio OAuth login and logout flows.",
+        "Manage the browser origins allowed to complete 九格多源本体构建系统 OAuth login and logout flows.",
       inputs: [],
     },
     {
       id: "system-admin.agent-config-list",
       exportName: "AgentConfigListScene",
       description:
-        "List the built-in BKN Agents (smart Q&A, business provenance, semantic understanding) as cards with publish state, model and edit rights; Agents are seeded per release and not created here.",
+        "List the built-in 九格多源本体构建系统 Agents (smart Q&A, business provenance, semantic understanding) as cards with publish state, model and edit rights; Agents are seeded per release and not created here.",
       inputs: [],
     },
     {
       id: "system-admin.agent-config",
       exportName: "AgentConfigScene",
       description:
-        "Configure one built-in BKN Agent: model, Context Loader MCP surface, execution and context limits, publish state, and the versioned shared Prompt with rollback. Read-only for callers who may not edit it.",
+        "Configure one built-in 九格多源本体构建系统 Agent: model, Context Loader MCP surface, execution and context limits, publish state, and the versioned shared Prompt with rollback. Read-only for callers who may not edit it.",
       inputs: [{ name: "agentId", type: "string", required: true }],
     },
     {
       id: "system-admin.audit",
       exportName: "AuditLogPage",
-      description: "Browse BKN Safe administration Audit through the unified Observability Query.",
+      description:
+        "Browse 九格多源本体构建系统 administration Audit through the unified Observability Query.",
       inputs: [],
     },
   ],

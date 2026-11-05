@@ -7,7 +7,7 @@
 
 export const homeEnUS = {
   home: {
-    description: "OpenBKN home",
+    description: "九格多源本体构建系统 home",
     engineering: {
       install: {
         copied: "Install command copied",
@@ -15,7 +15,7 @@ export const homeEnUS = {
         copyFailed: "Copy failed. Please copy the command manually.",
         description:
           "Install the Skills needed for your project. Restart the Agent session after installation.",
-        title: "Get OpenBKN Skills",
+        title: "Get 九格多源本体构建系统 Skills",
         trigger: "Get Skills",
       },
       labels: {
@@ -55,13 +55,7 @@ export const homeEnUS = {
       morningAnonymous: "Good morning",
     },
     introduction:
-      "Welcome to OpenBKN. For all types of enterprise agents, OpenBKN builds business knowledge networks driven by ontology, uniformly organizing the enterprise's data, logic, actions and risks, combining the creativity of agents with the certainty of enterprise business, and supporting accurate, secure and reliable analysis, execution and decision-making.",
-    aboutOpenBkn: {
-      title: "Learn about OpenBKN",
-      description: "Learn about OpenBKN's positioning, open-source licensing, and ecosystem",
-      website: "Visit website ↗",
-      github: "Star on GitHub",
-    },
+      "Welcome to 九格多源本体构建系统. For all types of enterprise agents, 九格多源本体构建系统 builds business knowledge networks driven by ontology, uniformly organizing the enterprise's data, logic, actions and risks, combining the creativity of agents with the certainty of enterprise business, and supporting accurate, secure and reliable analysis, execution and decision-making.",
     pathLabel: "Build path",
     paths: {
       engineering: {
@@ -75,12 +69,6 @@ export const homeEnUS = {
           "Start with the platform environment and business data. Prepare the environment and data, then model the knowledge network; validate business outcomes and expose capabilities for invocation to create a usable, continuously evolving business knowledge network.",
         heading: "Build a knowledge network manually",
         title: "Manual build",
-      },
-      sample: {
-        description:
-          "Choose an official sample and install its data and knowledge network into this environment to get started.",
-        heading: "Install an official sample",
-        title: "One-click experience",
       },
     },
     sample: {
@@ -431,7 +419,7 @@ export const homeEnUS = {
         },
         validate: {
           detail:
-            "After building the knowledge network, choose the checks needed for business answers, MCP tool calls, and invocation evidence. Configure platform-level access when an external agent needs to use OpenBKN.",
+            "After building the knowledge network, choose the checks needed for business answers, MCP tool calls, and invocation evidence. Configure platform-level access when an external agent needs to use 九格多源本体构建系统.",
           required: {
             chat: {
               description:
@@ -444,11 +432,11 @@ export const homeEnUS = {
             },
             integration: {
               description:
-                "Copy MCP, CLI, or SDK configuration for the target agent platform so it can invoke OpenBKN search, query, and action capabilities.",
+                "Copy MCP, CLI, or SDK configuration for the target agent platform so it can invoke 九格多源本体构建系统 search, query, and action capabilities.",
               impact:
-                "External agent platforms cannot connect to OpenBKN, leaving the built knowledge and action capabilities unavailable in the target agent.",
+                "External agent platforms cannot connect to 九格多源本体构建系统, leaving the built knowledge and action capabilities unavailable in the target agent.",
               outcome:
-                "External agents can discover and invoke OpenBKN platform capabilities through the configured method.",
+                "External agents can discover and invoke 九格多源本体构建系统 platform capabilities through the configured method.",
               title: "Connect an agent platform",
             },
             mcpDebug: {

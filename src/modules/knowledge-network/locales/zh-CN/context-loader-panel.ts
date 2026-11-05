@@ -191,9 +191,9 @@ export const contextLoaderPanelPart = {
       copied: "已复制服务说明",
     },
     mcpConnect: {
-      title: "让智能体调用 OpenBKN 能力",
+      title: "让智能体调用九格多源本体构建系统能力",
       description:
-        "这里生成的是 MCP 接入配置。复制到智能体平台后，智能体可通过 MCP 工具访问 OpenBKN 暴露的检索、查询和行动能力。",
+        "这里生成的是 MCP 接入配置。复制到智能体平台后，智能体可通过 MCP 工具访问九格多源本体构建系统提供的检索、查询和行动能力。",
       stepIssueKey:
         "前往个人中心签发 API Key，并将 bak_ 开头的长期 Key 填入右侧配置的 Bearer Key。",
       stepCopyConfig: "选择智能体平台类型，复制整段配置并粘贴到对应的 MCP 服务配置中。",

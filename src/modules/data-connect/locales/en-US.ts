@@ -9,7 +9,7 @@ export const dataConnectEnUS = {
   dataConnect: {
     title: "Data Connections",
     description:
-      "Manage connector instances provided by the Vega backend within the BKN platform console.",
+      "Manage connector instances provided by the Vega backend within the 九格多源本体构建系统 console.",
     permissionRequired:
       "Your account does not have the required permission. Contact an administrator to request access.",
     loadErrorRefreshHint: "Please refresh the page and try again later.",

@@ -12,8 +12,6 @@ import {
   CopyOutlined,
   DatabaseOutlined,
   FileTextOutlined,
-  GithubOutlined,
-  LinkOutlined,
   PartitionOutlined,
   QuestionCircleOutlined,
   RocketOutlined,
@@ -35,8 +33,6 @@ import {
   type HomeBuildStage,
   writeHomeBuildState,
 } from "@/modules/home/lib/build-path-state";
-
-import { SampleExperience } from "@/modules/home/scenes/SampleExperience";
 
 import styles from "./HomeScene.module.css";
 
@@ -404,42 +400,12 @@ export function HomeScene() {
         <div className={styles.heroInner}>
           <h1>{greeting}</h1>
           <p className={styles.introduction}>{t("home.introduction")}</p>
-          <div className={styles.aboutEntry}>
-            <div className={styles.aboutEntryCopy}>
-              <span className={styles.aboutEntryIcon} aria-hidden>
-                <LinkOutlined />
-              </span>
-              <span>
-                <strong>{t("home.aboutOpenBkn.title")}</strong>
-                <small>{t("home.aboutOpenBkn.description")}</small>
-              </span>
-            </div>
-            <div className={styles.aboutEntryActions}>
-              <button
-                className={styles.aboutEntryLink}
-                onClick={() => window.open("https://openbkn.ai/", "_blank", "noopener,noreferrer")}
-                type="button"
-              >
-                {t("home.aboutOpenBkn.website")}
-              </button>
-              <button
-                className={styles.aboutEntryPrimary}
-                onClick={() =>
-                  window.open("https://github.com/openbkn-ai", "_blank", "noopener,noreferrer")
-                }
-                type="button"
-              >
-                <GithubOutlined />
-                {t("home.aboutOpenBkn.github")}
-              </button>
-            </div>
-          </div>
         </div>
       </header>
 
       <div className={styles.pathTabsOuter}>
         <div className={styles.pathTabs} role="tablist" aria-label={t("home.pathLabel")}>
-          {(["engineering", "platform", "sample"] as const).map((path) => (
+          {(["engineering", "platform"] as const).map((path) => (
             <button
               aria-selected={activePath === path}
               className={activePath === path ? styles.pathTabActive : styles.pathTab}
@@ -458,9 +424,7 @@ export function HomeScene() {
 
       <main className={styles.content}>
         <div className={styles.contentInner}>
-          {activePath === "sample" ? (
-            <SampleExperience />
-          ) : activePath === "platform" ? (
+          {activePath === "platform" ? (
             <section aria-labelledby="platform-build-title" className={styles.buildArea}>
               <div className={styles.sectionHeading}>
                 <div>

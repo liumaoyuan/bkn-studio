@@ -7,7 +7,7 @@
 
 export const integrationPart = {
   integration: {
-    title: "Integrate OpenBKN Capabilities",
+    title: "Integrate 九格多源本体构建系统 Capabilities",
     description:
       "Provide a unified integration entry for agent platforms and business systems. MCP is for agent tool calls, CLI is for terminals and agents, and SDK is for Node.js services.",
     modeLabel: "Integration Method",
@@ -21,16 +21,17 @@ export const integrationPart = {
     copy: "Copy",
     copyFailed: "Copy failed. Please copy the code manually.",
     cli: {
-      guideTitle: "Use OpenBKN from the CLI",
+      guideTitle: "Use 九格多源本体构建系统 from the CLI",
       guideDescription:
         "Use this for local terminals, CI/CD, and agents with shell access. OAuth account sessions are the default way to access platform capabilities without custom API protocol handling.",
       steps: {
         install: "Install @openbkn/bkn-sdk globally to get the openbkn command.",
-        token: "Sign in with an OpenBKN account; the CLI stores and refreshes the OAuth session.",
+        token:
+          "Sign in with a 九格多源本体构建系统 account; the CLI stores and refreshes the OAuth session.",
         context:
           "Use bkn list to get a knowledge network ID, then call platform or context commands as needed.",
         skill:
-          "After installing the OpenBKN Skill for an agent, use natural language to choose the corresponding command.",
+          "After installing the 九格多源本体构建系统 Skill for an agent, use natural language to choose the corresponding command.",
       },
       title: "CLI Examples",
       ariaLabel: "CLI examples",
@@ -38,7 +39,7 @@ export const integrationPart = {
       examples: {
         setup: {
           label: "Install and Authenticate",
-          title: "Install OpenBKN CLI and sign in with an account",
+          title: "Install 九格多源本体构建系统 CLI and sign in with an account",
           code: `npm install -g @openbkn/bkn-sdk
 
 export BKN_BASE_URL="{{platformOrigin}}"
@@ -69,7 +70,7 @@ openbkn context tools <kn-id>`,
         },
         "agent-skill": {
           label: "Agent Skill",
-          title: "Install OpenBKN Skill for agents with terminal access",
+          title: "Install the 九格多源本体构建系统 Skill for agents with terminal access",
           code: `npm install -g @openbkn/bkn-sdk
 npx skills add openbkn-ai/bkn-sdk@openbkn -g -y
 
@@ -81,13 +82,13 @@ openbkn help all`,
       },
     },
     sdk: {
-      guideTitle: "Integrate OpenBKN with the SDK",
+      guideTitle: "Integrate 九格多源本体构建系统 with the SDK",
       guideDescription:
         "Use this for Node.js server-side projects. The SDK establishes and refreshes OAuth sessions with account credentials, and wraps platform requests, MCP sessions, JSON-RPC calls, and response parsing.",
       steps: {
         install: "Install @openbkn/bkn-sdk.",
         token:
-          "Configure an OpenBKN account and password; the SDK establishes a refreshable OAuth session.",
+          "Configure a 九格多源本体构建系统 account and password; the SDK establishes a refreshable OAuth session.",
         client: "Create an authenticated client asynchronously with the platform URL.",
         tools:
           "Get a knowledge network ID first, then call bkn, resource, vega, or context capabilities as permitted by the account.",

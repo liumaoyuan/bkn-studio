@@ -142,7 +142,7 @@ export const networkPart = {
   importSuccess: "Imported successfully",
   importTitle: "Import knowledge network",
   integrationDescription:
-    "Connect OpenBKN capabilities to agent platforms and external systems through MCP or RESTful APIs.",
+    "Connect 九格多源本体构建系统 capabilities to agent platforms and external systems through MCP or RESTful APIs.",
   integrationTitle: "Knowledge Network Integration",
   copyNetworkIdentifier: "Copy knowledge network ID",
   copyNetworkIdentifierFailed: "Failed to copy knowledge network ID",

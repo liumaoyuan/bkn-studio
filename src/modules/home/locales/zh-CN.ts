@@ -7,14 +7,14 @@
 
 export const homeZhCN = {
   home: {
-    description: "OpenBKN 首页",
+    description: "九格多源本体构建系统首页",
     engineering: {
       install: {
         copied: "安装命令已复制",
         copyCommand: "复制命令",
         copyFailed: "复制失败，请手动复制命令",
         description: "按项目需要安装对应 Skill。安装完成后，重启 Agent 会话即可使用。",
-        title: "获取 OpenBKN Skills",
+        title: "获取九格多源本体构建系统 Skills",
         trigger: "获取 Skills",
       },
       labels: {
@@ -51,13 +51,7 @@ export const homeZhCN = {
       morningAnonymous: "早上好",
     },
     introduction:
-      "欢迎使用 OpenBKN。面向各类企业智能体，OpenBKN 以本体驱动构建业务知识网络，统一组织企业的数据、逻辑、行动与风险，让智能体的创造性与企业业务的确定性相结合，支撑准确、安全、可靠的分析、执行与决策。",
-    aboutOpenBkn: {
-      title: "了解 OpenBKN",
-      description: "了解 OpenBKN 定位、开源协议及生态",
-      website: "访问官网 ↗",
-      github: "GitHub 点 Star",
-    },
+      "欢迎使用九格多源本体构建系统。面向各类企业智能体，九格多源本体构建系统以本体驱动构建业务知识网络，统一组织企业的数据、逻辑、行动与风险，让智能体的创造性与企业业务的确定性相结合，支撑准确、安全、可靠的分析、执行与决策。",
     pathLabel: "构建路径",
     paths: {
       engineering: {
@@ -71,11 +65,6 @@ export const homeZhCN = {
           "从平台环境与业务数据出发，依次完成环境准备、数据准备和知识网络建模；再验证业务效果并开放调用，形成可用、可持续演进的业务知识网络。",
         heading: "手动构建知识网络",
         title: "手动构建",
-      },
-      sample: {
-        description: "选择官方样例，将数据和知识网络安装到当前环境后开始体验。",
-        heading: "安装官方样例",
-        title: "一键体验",
       },
     },
     sample: {
@@ -404,10 +393,10 @@ export const homeZhCN = {
             },
             integration: {
               description:
-                "按外部智能体平台的接入方式复制 MCP、CLI 或 SDK 配置，使其可以调用 OpenBKN 提供的检索、查询和行动能力。",
+                "按外部智能体平台的接入方式复制 MCP、CLI 或 SDK 配置，使其可以调用九格多源本体构建系统提供的检索、查询和行动能力。",
               impact:
-                "外部智能体平台无法接入 OpenBKN，已构建的知识和行动能力不能在目标智能体中使用。",
-              outcome: "外部智能体可按配置方式发现并调用 OpenBKN 平台能力。",
+                "外部智能体平台无法接入九格多源本体构建系统，已构建的知识和行动能力不能在目标智能体中使用。",
+              outcome: "外部智能体可按配置方式发现并调用九格多源本体构建系统平台能力。",
               title: "对接智能体平台",
             },
             mcpDebug: {

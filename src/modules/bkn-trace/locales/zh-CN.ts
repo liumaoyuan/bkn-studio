@@ -428,8 +428,7 @@ export const bknTraceZhCN = {
       },
     },
     businessProvenance: {
-      description:
-        "从业务会话、交互轮次和 OpenBKN 调用出发，解释业务结论及其数据、逻辑与行动依据。",
+      description: "从业务会话、交互轮次和系统调用出发，解释业务结论及其数据、逻辑与行动依据。",
       forbidden: "无权查看业务溯源",
       forbiddenDescription: "当前账号不能查看该范围内的业务溯源记录。",
       imageMissing: "需要升级企业版镜像",
@@ -893,7 +892,7 @@ export const bknTraceZhCN = {
         time: "时间",
       },
       description:
-        "查看用户和管理者对 OpenBKN 平台执行的操作，并通过真实关联进入 Trace 或业务溯源。",
+        "查看用户和管理者对九格多源本体构建系统执行的操作，并通过真实关联进入 Trace 或业务溯源。",
       emptyAssociated: "当前时间范围内没有匹配关联标识的操作日志。",
       emptyRange: "当前时间范围内没有操作日志。",
       endTime: "结束时间",
@@ -1226,7 +1225,7 @@ export const bknTraceZhCN = {
     },
     incompleteBusiness: "部分业务依据暂不可追溯",
     unnamedAgent: "未命名 Agent",
-    conclusionAtInteraction: "本次 OpenBKN 调用记录执行事实，最终业务结论请在所属交互轮次查看。",
+    conclusionAtInteraction: "本次系统调用记录执行事实，最终业务结论请在所属交互轮次查看。",
     durationUnits: { hour: "小时", millisecond: "毫秒", minute: "分钟", second: "秒" },
     edges: {
       caused_by: "直接原因",
@@ -1324,17 +1323,17 @@ export const bknTraceZhCN = {
       evidenceChain: "证据链",
       nodeDetails: "节点明细",
       relations: "业务关系",
-      requestDetail: "OpenBKN 调用详情",
-      interactionRequests: "本轮 OpenBKN 调用",
+      requestDetail: "系统调用详情",
+      interactionRequests: "本轮系统调用",
       interactionContext: "本轮问题与结果",
       snapshot: "快照预览",
       sqlFacts: "SQL 查询事实",
       traceGraph: "调用链",
       visibility: "可见性",
     },
-    interactionCallCount: "共 {{count}} 次 OpenBKN 调用",
-    interactionCallCount_one: "共 {{count}} 次 OpenBKN 调用",
-    interactionCallCount_other: "共 {{count}} 次 OpenBKN 调用",
+    interactionCallCount: "共 {{count}} 次系统调用",
+    interactionCallCount_one: "共 {{count}} 次系统调用",
+    interactionCallCount_other: "共 {{count}} 次系统调用",
     stages: {
       action: "行动与结果",
       claim: "业务结论",
@@ -1446,7 +1445,7 @@ export const bknTraceZhCN = {
     views: {
       conversations: "业务会话",
       interactions: "交互轮次",
-      requests: "OpenBKN 调用",
+      requests: "系统调用",
     },
   },
 } as const;
