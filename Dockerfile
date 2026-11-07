@@ -13,14 +13,27 @@ ARG NGINX_IMAGE=nginx:1.27-alpine
 
 FROM ${NODE_IMAGE} AS build
 
-# corepack ships with node 22 and pins pnpm from package.json#packageManager
-# (pnpm@11.5.1), so the in-image build matches the lockfile resolution exactly.
-RUN corepack enable
+# npm registry override; keeps the default upstream behavior when not passed.
+ARG NPM_REGISTRY=https://registry.npmjs.org/
+# Containers have no usable IPv6 route; without this Node may pick the AAAA
+# record first and fail the connection.
+ENV NODE_OPTIONS=--dns-result-order=ipv4first
+
+# Install the pnpm version pinned by package.json#packageManager directly with
+# npm. Corepack's downloader has no timeout/retry controls and fails when the
+# registry responds slowly, so let npm handle retries instead.
+RUN npm config set registry ${NPM_REGISTRY} \
+ && npm config set fetch-retries 5 \
+ && npm config set fetch-retry-maxtimeout 120000 \
+ && npm install -g pnpm@11.5.1
+
 WORKDIR /app
 
 # Lockfile-only layer first so the dependency install caches across source edits.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-RUN pnpm install --frozen-lockfile
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile --registry=${NPM_REGISTRY} \
+      --fetch-retries=5 --fetch-timeout=120000 --network-concurrency=8
 
 COPY . .
 # Transpile-only bundle (esbuild via vite) — deliberately NOT `pnpm build`,
