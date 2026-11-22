@@ -48,17 +48,18 @@ function ReturnToProbe() {
 }
 
 describe("WorkspaceExtensionNavItems", () => {
-  it("names the graph explorer with its edition and offers the upgrade when no build has it", async () => {
+  it("leaves the paid graph explorer entry out when this build has no page and no upgrade dialog", () => {
+    // The community distribution turns the upgrade dialog off (product-edition-policy), so
+    // naming the page here would leave a button that silently does nothing when clicked.
     renderItems();
 
-    const entry = screen.getByTestId("workspace-nav-upgrade-graph_explorer");
-    expect(entry.textContent).toContain("knowledgeNetwork.workspaceGraphExplorer");
-    fireEvent.click(entry);
-
-    expect(await screen.findByRole("dialog")).toBeTruthy();
+    expect(screen.queryByTestId("workspace-nav-upgrade-graph_explorer")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "knowledgeNetwork.workspaceGraphExplorer" }),
+    ).toBeNull();
   });
 
-  it("asks for the enterprise frontend image, not a purchase, when the licence covers the page", async () => {
+  it("leaves the upgrade entry out even when an enterprise backend reports the capability", () => {
     // An enterprise backend that has the graph explorer, reached from a community frontend.
     const snapshot: Entitlement = {
       capabilities: ["graph_explorer"],
@@ -77,11 +78,7 @@ describe("WorkspaceExtensionNavItems", () => {
       </EntitlementContext.Provider>,
     );
 
-    fireEvent.click(screen.getByTestId("workspace-nav-upgrade-graph_explorer"));
-
-    const dialog = await screen.findByRole("dialog");
-    expect(dialog.textContent).toContain("common.entitlement.imageMissingTitle");
-    expect(dialog.textContent).not.toContain("common.entitlement.upgradeTo");
+    expect(screen.queryByTestId("workspace-nav-upgrade-graph_explorer")).toBeNull();
   });
 
   it("leaves out overview buttons the extension did not also offer here", () => {

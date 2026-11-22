@@ -14,16 +14,9 @@ const keys = (items: { key: string }[]) => items.map((item) => item.key);
 const systemGroup = (items: ReturnType<typeof filterNavByPermission>) =>
   items.find((item) => item.key === "system-management");
 
-describe("consoleNavigation — 主线菜单顺序", () => {
-  it("将可观测性置于通用业务知识网络之后、模型管理之前", () => {
-    const navigationKeys = keys(consoleNavigation);
-
-    expect(navigationKeys.indexOf("general-business-knowledge-network")).toBeLessThan(
-      navigationKeys.indexOf("observability"),
-    );
-    expect(navigationKeys.indexOf("observability")).toBeLessThan(
-      navigationKeys.indexOf("model-resources"),
-    );
+describe("consoleNavigation — 主线菜单", () => {
+  it("不展示可观测性菜单", () => {
+    expect(keys(consoleNavigation)).not.toContain("observability");
   });
 });
 
@@ -36,7 +29,6 @@ describe("filterNavByPermission — 系统管理按功能独立授权", () => {
       "domain-knowledge-network",
       "execution-factory",
       "general-business-knowledge-network",
-      "observability",
     ]);
   });
 
@@ -57,10 +49,8 @@ describe("filterNavByPermission — 系统管理按功能独立授权", () => {
         "user-management",
         "role-management",
         "authorization-management",
-        "license-management",
         "access-address-management",
         "agent-config",
-        "log-management",
       ]),
     );
   });
@@ -76,13 +66,12 @@ describe("filterNavByPermission — 系统管理按功能独立授权", () => {
     expect(keys(group!.children ?? [])).toEqual(["agent-config"]);
   });
 
-  it("仅持有 admin-audit:view → 系统管理只包含原有管理审计日志", () => {
+  it("仅持有 admin-audit:view → 审计日志入口已移除，系统管理不显示", () => {
     const group = systemGroup(filterNavByPermission(consoleNavigation, ["admin-audit:view"]));
-    expect(group).toBeDefined();
-    expect(keys(group!.children ?? [])).toEqual(["log-management"]);
+    expect(group).toBeUndefined();
   });
 
-  it("审计管理员的用户和部门只读权限 → 显示用户管理与审计日志", () => {
+  it("审计管理员的用户和部门只读权限 → 只显示用户管理", () => {
     const group = systemGroup(
       filterNavByPermission(consoleNavigation, [
         "admin-audit:view",
@@ -91,7 +80,7 @@ describe("filterNavByPermission — 系统管理按功能独立授权", () => {
       ]),
     );
     expect(group).toBeDefined();
-    expect(keys(group!.children ?? [])).toEqual(["user-management", "log-management"]);
+    expect(keys(group!.children ?? [])).toEqual(["user-management"]);
   });
 
   it("审计角色仍可看到固定业务入口", () => {
@@ -108,7 +97,6 @@ describe("filterNavByPermission — 系统管理按功能独立授权", () => {
       "domain-knowledge-network",
       "execution-factory",
       "general-business-knowledge-network",
-      "observability",
       "system-management",
     ]);
   });
@@ -147,13 +135,13 @@ describe("filterNavByPermission — 系统管理按功能独立授权", () => {
     );
   });
 
-  it("可观测性设置入口不按角色隐藏，页面由服务端 Access Profile 授权", () => {
+  it("可观测性设置入口不再出现在菜单中", () => {
     const regular = filterNavByPermission(consoleNavigation, []);
     const superAdmin = filterNavByPermission(consoleNavigation, [], true);
     const observabilityChildren = (items: ReturnType<typeof filterNavByPermission>) =>
       items.find((item) => item.key === "observability")?.children ?? [];
 
-    expect(keys(observabilityChildren(regular))).toContain("observability-settings");
-    expect(keys(observabilityChildren(superAdmin))).toContain("observability-settings");
+    expect(keys(observabilityChildren(regular))).not.toContain("observability-settings");
+    expect(keys(observabilityChildren(superAdmin))).not.toContain("observability-settings");
   });
 });
