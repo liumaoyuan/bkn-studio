@@ -13,6 +13,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { CAPABILITIES } from "@/framework/entitlement/capabilities";
 import { CapabilityUpgradeDialog } from "@/framework/entitlement/CapabilityUpgradeDialog";
 import { EditionBadge } from "@/framework/entitlement/EditionBadge";
+import { COMMERCIAL_EDITIONS_ENABLED } from "@/framework/entitlement/product-edition-policy";
 import {
   extensionWorkspaceNavItems,
   isExtensionInstalled,
@@ -26,14 +27,21 @@ import styles from "../KnowledgeNetworkWorkspaceScene.module.css";
 /**
  * Paid pages a build may lack. Where no installed extension brings one, the sidebar still names
  * it, marked with its edition, and opens the upgrade dialog instead of a page.
+ *
+ * The community distribution turns the upgrade dialog off entirely (product-edition-policy), so
+ * naming a paid page there would leave a button that does nothing when clicked. Keep the list
+ * empty in that build instead.
  */
-const UPGRADE_ENTRIES: { capability: string; icon: ReactNode; labelKey: string }[] = [
-  {
-    capability: CAPABILITIES.GRAPH_EXPLORER,
-    icon: <CompassOutlined />,
-    labelKey: "knowledgeNetwork.workspaceGraphExplorer",
-  },
-];
+const UPGRADE_ENTRIES: { capability: string; icon: ReactNode; labelKey: string }[] =
+  COMMERCIAL_EDITIONS_ENABLED
+    ? [
+        {
+          capability: CAPABILITIES.GRAPH_EXPLORER,
+          icon: <CompassOutlined />,
+          labelKey: "knowledgeNetwork.workspaceGraphExplorer",
+        },
+      ]
+    : [];
 
 /**
  * Sidebar entries another build registered for this network (see registry.ts), listed under

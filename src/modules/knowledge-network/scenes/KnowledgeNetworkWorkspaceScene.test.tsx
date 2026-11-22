@@ -5,8 +5,8 @@
  * Conditions. See LICENSE for the full text.
  */
 
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
 import { EntitlementContext } from "@/framework/entitlement/entitlement-context";
 import { CAPABILITIES } from "@/framework/entitlement/capabilities";
@@ -106,42 +106,10 @@ function renderScene(snapshot: Entitlement) {
   );
 }
 
-describe("KnowledgeNetworkWorkspaceScene object metric navigation", () => {
-  beforeEach(() => {
-    mocks.navigate.mockReset();
-  });
-
-  it("opens the upgrade dialog without a count when object metrics are not installed", () => {
-    renderScene(entitlement());
-
-    const entry = screen.getByRole("button", { name: /对象指标/ });
-    expect(within(entry).getByText("专业版")).toBeTruthy();
-    expect(within(entry).queryByText("0")).toBeNull();
-
-    fireEvent.click(entry);
-
-    expect(screen.getByRole("dialog")).toBeTruthy();
-    expect(mocks.navigate).not.toHaveBeenCalled();
-  });
-
-  it("opens the upgrade dialog without a count when object metrics are not licensed", () => {
-    renderScene(
-      entitlement({
-        extensions: [CAPABILITIES.OBJECT_METRICS],
-      }),
-    );
-
-    const entry = screen.getByRole("button", { name: /对象指标/ });
-    expect(within(entry).getByText("专业版")).toBeTruthy();
-    expect(within(entry).queryByText("0")).toBeNull();
-
-    fireEvent.click(entry);
-
-    expect(screen.getByRole("dialog")).toBeTruthy();
-    expect(mocks.navigate).not.toHaveBeenCalled();
-  });
-
-  it("navigates with a count and no badge when object metrics are available", () => {
+describe("KnowledgeNetworkWorkspaceScene paid navigation", () => {
+  it("leaves out the paid object metric entry in the community distribution", () => {
+    // The community distribution has neither the metric page nor the upgrade dialog
+    // (product-edition-policy), so an entry here would be a button that silently does nothing.
     renderScene(
       entitlement({
         capabilities: [CAPABILITIES.OBJECT_METRICS],
@@ -152,12 +120,6 @@ describe("KnowledgeNetworkWorkspaceScene object metric navigation", () => {
       }),
     );
 
-    const entry = screen.getByRole("button", { name: /对象指标/ });
-    expect(within(entry).queryByText("专业版")).toBeNull();
-    expect(within(entry).getByText("0")).toBeTruthy();
-
-    fireEvent.click(entry);
-
-    expect(mocks.navigate).toHaveBeenCalledWith("/knowledge-network/workspace/network-1/metrics");
+    expect(screen.queryByRole("button", { name: /对象指标/ })).toBeNull();
   });
 });

@@ -14,7 +14,7 @@ async function expectConsoleShell(page: Page) {
 }
 
 test.describe("system-admin license management", () => {
-  test("renders license summary and keeps permission management naming separate", async ({
+  test("renders license summary on a direct visit and keeps permission management naming separate", async ({
     page,
   }) => {
     await page.goto("/studio/system/license", { waitUntil: "domcontentloaded" });
@@ -27,7 +27,15 @@ test.describe("system-admin license management", () => {
     // Community-only 前端不展示版本与订阅入口。
     await expect(main.getByRole("button", { name: "查看授权范围" })).toHaveCount(0);
 
+    // The community distribution does not offer a license entry in the
+    // system-admin menu; the page stays reachable by direct link and by the
+    // subscription page's import action.
+    await expect(page.getByRole("button", { name: /授权管理/ })).toHaveCount(0);
+
+    // Permission management (权限管理) and license management (授权管理) remain
+    // separate concepts: the sidebar entry is still there once the system group
+    // is expanded.
+    await page.getByRole("button", { name: /系统管理/ }).click();
     await expect(page.getByRole("button", { name: /权限管理/ })).toBeVisible();
-    await expect(page.getByRole("button", { name: /授权管理/ })).toBeVisible();
   });
 });

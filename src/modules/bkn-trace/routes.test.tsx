@@ -15,7 +15,7 @@ import { bknTraceModuleManifest } from "@/modules/bkn-trace/module.manifest";
 import { bknTraceRouteContribution } from "@/modules/bkn-trace/routes";
 
 describe("bkn-trace module registration", () => {
-  it("contributes a shell route and navigation item", () => {
+  it("contributes shell routes without a main-menu entry", () => {
     expect(bknTraceRouteContribution.moduleId).toBe("bkn-trace");
     expect(bknTraceRouteContribution.routes.map((route) => route.path)).toEqual(
       expect.arrayContaining([
@@ -25,23 +25,9 @@ describe("bkn-trace module registration", () => {
         "system/bkn-trace",
       ]),
     );
-    expect(bknTraceNavigation.parentKey).toBeUndefined();
-    expect(bknTraceNavigation.items[0]).toMatchObject({
-      key: "observability",
-      labelKey: "shell.items.observability",
-    });
-    expect(bknTraceNavigation.items[0].children?.map((item) => item.key)).toEqual([
-      "trace-analysis",
-      "observability-logs",
-      "observability-settings",
-    ]);
-    expect(consoleNavigation.map((item) => item.key)).toContain("observability");
-    expect(bknTraceNavigation.items[0].children?.map((item) => item.key)).not.toContain(
-      "business-provenance-prototype",
-    );
-    expect(bknTraceNavigation.items[0].children?.map((item) => item.key)).not.toContain(
-      "business-provenance",
-    );
+    // The observability menu is not offered, but the routes stay reachable by deep link.
+    expect(bknTraceNavigation.items).toEqual([]);
+    expect(consoleNavigation.map((item) => item.key)).not.toContain("observability");
   });
 
   it("registers permissions in runtime module manifests", () => {
@@ -53,10 +39,6 @@ describe("bkn-trace module registration", () => {
     const route = bknTraceRouteContribution.routes.find(
       ({ path }) => path === "observability/settings",
     );
-    expect(
-      bknTraceNavigation.items[0].children?.find((item) => item.key === "observability-settings")
-        ?.requiresSuperAdmin,
-    ).not.toBe(true);
     expect(isValidElement(route?.element) && route.element.type).toBe(Suspense);
   });
 

@@ -5,59 +5,13 @@
  * Conditions. See LICENSE for the full text.
  */
 
-import {
-  BranchesOutlined,
-  FileSearchOutlined,
-  FileTextOutlined,
-  SettingOutlined,
-} from "@ant-design/icons";
-
 import type { ConsoleNavContribution } from "@/app/shell/navigation/types";
-import { CAPABILITIES } from "@/framework/entitlement/capabilities";
-import { COMMERCIAL_EDITIONS_ENABLED } from "@/framework/entitlement/product-edition-policy";
 
+/**
+ * This distribution does not offer the observability menu, so the module contributes no
+ * top-level entries. Its routes stay registered (see routes.tsx): deep links such as
+ * `/observability/traces` and cross-page jumps keep working.
+ */
 export const bknTraceNavigation: ConsoleNavContribution = {
-  afterKey: "general-business-knowledge-network",
-  items: [
-    {
-      key: "observability",
-      labelKey: "shell.items.observability",
-      icon: <BranchesOutlined />,
-      children: [
-        ...(COMMERCIAL_EDITIONS_ENABLED
-          ? [
-              {
-                key: "business-provenance",
-                labelKey: "shell.items.businessProvenance",
-                // 只标不挡:业务溯源由 bkn-trace 实现,不在 bkn-safe 的装配表里,
-                // /api/safe/v1/capabilities 永远不报这个 key(ee-design.md §6「A 答不了 B」)。
-                // 拿它做 capability 门控会让这一项永久隐藏。
-                paidCapability: CAPABILITIES.BUSINESS_PROVENANCE,
-                paidEdition: "enterprise" as const,
-                icon: <FileSearchOutlined />,
-                path: "/observability/business-provenance",
-              },
-            ]
-          : []),
-        {
-          key: "trace-analysis",
-          labelKey: "shell.items.traceAnalysis",
-          icon: <BranchesOutlined />,
-          path: "/observability/traces",
-        },
-        {
-          key: "observability-logs",
-          labelKey: "shell.items.observabilityLogs",
-          icon: <FileTextOutlined />,
-          path: "/observability/logs",
-        },
-        {
-          key: "observability-settings",
-          labelKey: "shell.items.observabilitySettings",
-          icon: <SettingOutlined />,
-          path: "/observability/settings",
-        },
-      ],
-    },
-  ],
+  items: [],
 };
