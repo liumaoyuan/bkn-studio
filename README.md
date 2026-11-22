@@ -50,6 +50,15 @@ For data resource governance and retrieval construction, BKN Studio supports:
 - Viewing index build tasks, build status, failure details, and rebuild operations.
 - Providing stable data resource binding sources for domain knowledge networks.
 
+### Multi-source Data Ingestion
+
+For file and multi-source onboarding, BKN Studio supports:
+
+- Uploading CSV, Excel, PDF, DOCX, images, and video, with previews and worksheet inspection.
+- Running a traceable seven-stage cleaning and ingestion pipeline with idempotent writes.
+- Managing data sources, canonical datasets, ingestion runs, and scheduled discovery.
+- Using a built-in approval-gated Agent and MCP tools to inspect, ingest, and verify data.
+
 ### Execution Factory
 
 For tool capability production and integration, BKN Studio supports:

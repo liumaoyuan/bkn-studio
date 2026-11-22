@@ -1,0 +1,135 @@
+/**
+ * Copyright (c) 2026 OpenBKN
+ * SPDX-License-Identifier: LicenseRef-OpenBKN
+ * Licensed under the OpenBKN License, a modified Apache 2.0 with Additional
+ * Conditions. See LICENSE for the full text.
+ */
+
+.workbench {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 8px;
+}
+
+.header h2 {
+  margin-bottom: 4px;
+}
+
+.spacePicker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px 4px 10px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 10px;
+  background: var(--ant-color-bg-container);
+}
+
+.spacePicker :global(.ant-select) {
+  min-width: 250px;
+}
+
+.content {
+  min-width: 0;
+  padding-top: 4px;
+}
+
+.detailCard {
+  border-color: var(--ant-color-border-secondary);
+  box-shadow: var(--ant-box-shadow-secondary);
+}
+
+.pipelineCard {
+  height: 100%;
+  border-color: var(--ant-color-border-secondary);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+.pipelineCard:hover {
+  border-color: var(--ant-color-primary-border);
+  box-shadow: var(--ant-box-shadow-secondary);
+  transform: translateY(-2px);
+}
+
+.pipelineCard :global(.ant-card-body) {
+  min-height: 190px;
+}
+
+.pipelineStepCount {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border-radius: 999px;
+  color: var(--ant-color-primary);
+  background: var(--ant-color-primary-bg);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.filterBar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 10px;
+  background: var(--ant-color-fill-quaternary);
+}
+
+.storageCard {
+  background:
+    linear-gradient(135deg, var(--ant-color-primary-bg), transparent 42%),
+    var(--ant-color-bg-container);
+}
+
+.stageCard {
+  min-height: 100%;
+  border-color: var(--ant-color-border-secondary);
+  box-shadow: none;
+}
+
+.codeBlock {
+  max-height: 320px;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-fill-quaternary);
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 900px) {
+  .header {
+    flex-direction: column;
+  }
+
+  .spacePicker {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .spacePicker :global(.ant-select) {
+    flex: 1;
+    min-width: 190px;
+  }
+
+  .filterBar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

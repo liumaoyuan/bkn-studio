@@ -8,6 +8,7 @@
 import { dataCatalogModuleManifest } from "@/modules/data-catalog/module.manifest";
 import { bknTraceModuleManifest } from "@/modules/bkn-trace/module.manifest";
 import { dataConnectModuleManifest } from "@/modules/data-connect/module.manifest";
+import { dataIngestionModuleManifest } from "@/modules/data-ingestion/module.manifest";
 import { executionFactoryLabModuleManifest } from "@/modules/execution-factory-lab/module.manifest";
 import { executionFactoryModuleManifest } from "@/modules/execution-factory/module.manifest";
 import { homeModuleManifest } from "@/modules/home/module.manifest";
@@ -20,6 +21,7 @@ export const runtimeModuleManifests = [
   knowledgeNetworkModuleManifest,
   dataCatalogModuleManifest,
   dataConnectModuleManifest,
+  dataIngestionModuleManifest,
   executionFactoryModuleManifest,
   modelResourcesModuleManifest,
   executionFactoryLabModuleManifest,
