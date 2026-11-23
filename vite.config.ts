@@ -114,6 +114,14 @@ export default defineConfig(({ mode }) => {
           secure: false,
           target: devProxyOrigin,
         },
+        // 本体构建浮窗的本地 copilot 服务（独立于 mock 开关，须在通用 /api 代理之前）。
+        "/api/copilot": {
+          changeOrigin: true,
+          secure: false,
+          timeout: 180_000,
+          proxyTimeout: 180_000,
+          target: process.env.VITE_COPILOT_TARGET ?? "http://127.0.0.1:8787",
+        },
         // Specific API prefixes must be listed before the generic /api proxy.
         "/api/agent-operator-integration": {
           changeOrigin: true,
