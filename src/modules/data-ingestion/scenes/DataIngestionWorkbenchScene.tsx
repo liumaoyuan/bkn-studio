@@ -48,14 +48,22 @@ import {
 import type { ColumnsType } from "antd/es/table";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router-dom";
 
 import { useAppServices } from "@/framework/context/use-app-services";
 import { useRuntimeConfig } from "@/framework/context/use-runtime-config";
 import { extractRequestErrorMessage } from "@/framework/request/error-message";
 import { ControlDatabaseSetup } from "@/modules/data-ingestion/components/ControlDatabaseSetup";
 import { ControlDatabaseSwitchModal } from "@/modules/data-ingestion/components/ControlDatabaseSwitchModal";
+import { DatabaseConnectionPicker } from "@/modules/data-ingestion/components/DatabaseConnectionPicker";
 import { IngestionAgentPanel } from "@/modules/data-ingestion/components/IngestionAgentPanel";
 import type { DataIngestionWorkbenchSceneProps } from "@/modules/data-ingestion/contracts/scenes";
+import {
+  buildMysqlConnectionUrl,
+  createDataSpaceSlug,
+  DEFAULT_MYSQL_PORT,
+  normalizeMysqlHost,
+} from "@/modules/data-ingestion/lib/mysql-connection-url";
 import {
   dataIngestionService,
   setDataIngestionSpace,
@@ -80,6 +88,16 @@ import styles from "./DataIngestionWorkbenchScene.module.css";
 
 const { Paragraph, Text, Title } = Typography;
 const DEFAULT_PAGE_SIZE = 20;
+const MYSQL_DATABASE_NAME_PATTERN = /^[A-Za-z0-9_]+$/;
+
+interface DataSpaceFormValues {
+  database_name: string;
+  host: string;
+  name: string;
+  password: string;
+  port: number;
+  username: string;
+}
 
 function formatBytes(value: number) {
   if (!value) {
@@ -378,6 +396,8 @@ export function DataIngestionWorkbenchScene({
   const { t } = useTranslation();
   const { message } = useAppServices();
   const runtimeConfig = useRuntimeConfig();
+  const [searchParams] = useSearchParams();
+  const requestedDatasetId = searchParams.get("dataset")?.trim() || "";
   const can = useCallback(
     (permission: string) => runtimeConfig.currentUser.permissions.includes(permission),
     [runtimeConfig.currentUser.permissions],
@@ -402,11 +422,7 @@ export function DataIngestionWorkbenchScene({
   const [spacesReady, setSpacesReady] = useState(false);
   const [spaceModalOpen, setSpaceModalOpen] = useState(false);
   const [creatingSpace, setCreatingSpace] = useState(false);
-  const [spaceForm, setSpaceForm] = useState({
-    name: "",
-    slug: "",
-    database_url: "",
-  });
+  const [spaceForm] = Form.useForm<DataSpaceFormValues>();
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -434,7 +450,12 @@ export function DataIngestionWorkbenchScene({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [inspection, setInspection] = useState<DataIngestionInspection | null>(null);
   const [activeSheetIndex, setActiveSheetIndex] = useState(0);
-  const [selectedDatasetId, setSelectedDatasetId] = useState("");
+  const [selectedDatasetId, setSelectedDatasetId] = useState(requestedDatasetId);
+  useEffect(() => {
+    if (requestedDatasetId) {
+      setSelectedDatasetId(requestedDatasetId);
+    }
+  }, [requestedDatasetId]);
   const [selectedTemplateCode, setSelectedTemplateCode] = useState("tabular_standard");
   const [selectedSourceId, setSelectedSourceId] = useState("");
   const [inspecting, setInspecting] = useState(false);
@@ -768,19 +789,22 @@ export function DataIngestionWorkbenchScene({
     setDrawerRun(null);
   }
 
-  async function saveDataSpace() {
-    if (!spaceForm.name.trim() || !spaceForm.slug.trim() || !spaceForm.database_url.trim()) {
-      return;
-    }
+  async function saveDataSpace(values: DataSpaceFormValues) {
     setCreatingSpace(true);
     try {
       const created = await dataIngestionService.createDataSpace({
-        name: spaceForm.name.trim(),
-        slug: spaceForm.slug.trim(),
-        database_url: spaceForm.database_url.trim(),
+        name: values.name.trim(),
+        slug: createDataSpaceSlug(values.name, values.database_name),
+        database_url: buildMysqlConnectionUrl({
+          databaseName: values.database_name,
+          host: values.host,
+          password: values.password || "",
+          port: values.port,
+          username: values.username,
+        }),
       });
       setSpaces((current) => [...current, created]);
-      setSpaceForm({ name: "", slug: "", database_url: "" });
+      spaceForm.resetFields();
       setSpaceModalOpen(false);
       changeSpace(created.id);
       message.success(t("dataIngestion.spaces.created"));
@@ -1381,7 +1405,6 @@ export function DataIngestionWorkbenchScene({
     { key: "pipelines", label: t("dataIngestion.tabs.pipelines") },
     { key: "sources", label: t("dataIngestion.tabs.sources") },
     { key: "runs", label: t("dataIngestion.tabs.runs") },
-    { key: "catalog", label: t("dataIngestion.tabs.catalog") },
     { key: "auto-scan", label: t("dataIngestion.tabs.autoScan") },
     ...(can("data_ingestion:agent_use")
       ? [{ key: "agent", label: t("dataIngestion.tabs.agent") }]
@@ -1470,15 +1493,25 @@ export function DataIngestionWorkbenchScene({
             <Row gutter={16}>
               <Col md={8} xs={24}>
                 <Form.Item label={t("dataIngestion.import.dataset")}>
-                  <Select
-                    onChange={setSelectedDatasetId}
-                    options={datasets.map((item) => ({
-                      label: item.name,
-                      value: item.id,
-                    }))}
-                    placeholder={t("dataIngestion.import.noDatasets")}
-                    value={selectedDatasetId || undefined}
-                  />
+                  <Space.Compact block>
+                    <Select
+                      onChange={setSelectedDatasetId}
+                      options={datasets.map((item) => ({
+                        label: item.name,
+                        value: item.id,
+                      }))}
+                      placeholder={t("dataIngestion.import.noDatasets")}
+                      style={{ flex: 1 }}
+                      value={selectedDatasetId || undefined}
+                    />
+                    <Button
+                      disabled={!can("data_ingestion:create")}
+                      icon={<PlusOutlined />}
+                      onClick={() => setDatasetModalOpen(true)}
+                    >
+                      {t("dataIngestion.actions.createDataset")}
+                    </Button>
+                  </Space.Compact>
                 </Form.Item>
               </Col>
               <Col md={8} xs={24}>
@@ -1518,11 +1551,6 @@ export function DataIngestionWorkbenchScene({
               >
                 {t("dataIngestion.actions.startIngestion")}
               </Button>
-              {!datasets.length ? (
-                <Button onClick={() => setDatasetModalOpen(true)}>
-                  {t("dataIngestion.actions.createDataset")}
-                </Button>
-              ) : null}
             </Space>
           </Form>
         </Card>
@@ -2139,6 +2167,7 @@ export function DataIngestionWorkbenchScene({
       />
 
       <Modal
+        destroyOnClose
         footer={[
           <Button key="cancel" onClick={() => setSpaceModalOpen(false)}>
             {t("dataIngestion.actions.cancel")}
@@ -2146,15 +2175,19 @@ export function DataIngestionWorkbenchScene({
           <Button
             key="save"
             loading={creatingSpace}
-            onClick={() => void saveDataSpace()}
+            onClick={() => spaceForm.submit()}
             type="primary"
           >
-            {t("dataIngestion.actions.save")}
+            {t("dataIngestion.spaces.createAction")}
           </Button>,
         ]}
-        onCancel={() => setSpaceModalOpen(false)}
+        onCancel={() => {
+          spaceForm.resetFields();
+          setSpaceModalOpen(false);
+        }}
         open={spaceModalOpen}
         title={t("dataIngestion.spaces.create")}
+        width={760}
       >
         <Alert
           description={t("dataIngestion.spaces.databaseHint")}
@@ -2163,42 +2196,133 @@ export function DataIngestionWorkbenchScene({
           style={{ marginBottom: 16 }}
           type="info"
         />
-        <Form layout="vertical">
-          <Form.Item label={t("dataIngestion.spaces.name")} required>
-            <Input
-              onChange={(event) =>
-                setSpaceForm((current) => ({
-                  ...current,
-                  name: event.target.value,
-                }))
-              }
-              placeholder={t("dataIngestion.spaces.namePlaceholder")}
-              value={spaceForm.name}
-            />
+        <Form
+          form={spaceForm}
+          initialValues={{ port: DEFAULT_MYSQL_PORT }}
+          layout="vertical"
+          onFinish={(values) => void saveDataSpace(values)}
+          requiredMark="optional"
+        >
+          <Form.Item
+            extra={t("dataIngestion.spaces.autoIdentifierHint")}
+            label={t("dataIngestion.spaces.name")}
+            name="name"
+            rules={[
+              {
+                required: true,
+                whitespace: true,
+                message: t("dataIngestion.spaces.nameRequired"),
+              },
+              {
+                max: 120,
+                message: t("dataIngestion.spaces.nameTooLong"),
+              },
+            ]}
+          >
+            <Input autoComplete="off" placeholder={t("dataIngestion.spaces.namePlaceholder")} />
           </Form.Item>
-          <Form.Item label={t("dataIngestion.spaces.slug")} required>
-            <Input
-              onChange={(event) =>
-                setSpaceForm((current) => ({
-                  ...current,
-                  slug: event.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"),
-                }))
-              }
-              placeholder="marine-data"
-              value={spaceForm.slug}
-            />
-          </Form.Item>
-          <Form.Item label={t("dataIngestion.spaces.databaseUrl")} required>
+
+          <DatabaseConnectionPicker form={spaceForm} />
+
+          <Row gutter={16}>
+            <Col sm={17} xs={24}>
+              <Form.Item
+                extra={t("dataIngestion.spaces.hostHint")}
+                label={t("dataIngestion.spaces.host")}
+                name="host"
+                rules={[
+                  {
+                    validator: (_rule: unknown, value?: string) => {
+                      const host = normalizeMysqlHost(value || "");
+                      if (!host) {
+                        return Promise.reject(new Error(t("dataIngestion.spaces.hostRequired")));
+                      }
+                      if (/[\s/?#@]/.test(host)) {
+                        return Promise.reject(new Error(t("dataIngestion.spaces.hostInvalid")));
+                      }
+                      return Promise.resolve();
+                    },
+                  },
+                ]}
+              >
+                <Input autoComplete="off" placeholder={t("dataIngestion.spaces.hostPlaceholder")} />
+              </Form.Item>
+            </Col>
+            <Col sm={7} xs={24}>
+              <Form.Item
+                extra={t("dataIngestion.spaces.portHint")}
+                label={t("dataIngestion.spaces.port")}
+                name="port"
+                rules={[
+                  {
+                    required: true,
+                    message: t("dataIngestion.spaces.portInvalid"),
+                  },
+                ]}
+              >
+                <InputNumber
+                  className={styles.fullWidth}
+                  controls={false}
+                  max={65535}
+                  min={1}
+                  precision={0}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Row gutter={16}>
+            <Col sm={12} xs={24}>
+              <Form.Item
+                extra={t("dataIngestion.spaces.databaseNameHint")}
+                label={t("dataIngestion.spaces.databaseName")}
+                name="database_name"
+                rules={[
+                  {
+                    required: true,
+                    message: t("dataIngestion.spaces.databaseNameRequired"),
+                  },
+                  {
+                    pattern: MYSQL_DATABASE_NAME_PATTERN,
+                    message: t("dataIngestion.spaces.databaseNameInvalid"),
+                  },
+                ]}
+              >
+                <Input
+                  autoComplete="off"
+                  placeholder={t("dataIngestion.spaces.databaseNamePlaceholder")}
+                />
+              </Form.Item>
+            </Col>
+            <Col sm={12} xs={24}>
+              <Form.Item
+                extra={t("dataIngestion.spaces.usernameHint")}
+                label={t("dataIngestion.spaces.username")}
+                name="username"
+                rules={[
+                  {
+                    required: true,
+                    whitespace: true,
+                    message: t("dataIngestion.spaces.usernameRequired"),
+                  },
+                ]}
+              >
+                <Input
+                  autoComplete="off"
+                  placeholder={t("dataIngestion.spaces.usernamePlaceholder")}
+                />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Form.Item
+            extra={t("dataIngestion.spaces.passwordHint")}
+            label={t("dataIngestion.spaces.password")}
+            name="password"
+          >
             <Input.Password
               autoComplete="new-password"
-              onChange={(event) =>
-                setSpaceForm((current) => ({
-                  ...current,
-                  database_url: event.target.value,
-                }))
-              }
-              placeholder={t("dataIngestion.spaces.databaseUrlPlaceholder")}
-              value={spaceForm.database_url}
+              placeholder={t("dataIngestion.spaces.passwordPlaceholder")}
             />
           </Form.Item>
         </Form>

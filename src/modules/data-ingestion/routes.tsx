@@ -6,7 +6,7 @@
  */
 
 import { lazy, Suspense, type ReactNode } from "react";
-import type { RouteObject } from "react-router-dom";
+import { Navigate, type RouteObject } from "react-router-dom";
 
 import type { AppRouteContribution } from "@/app/router/types";
 import { RouteLoading } from "@/app/router/RouteLoading";
@@ -80,7 +80,7 @@ export const dataIngestionRoutes: RouteObject[] = [
   {
     path: "data-ingestion/catalog",
     handle: handle(pageHandles.catalog),
-    element: page(<DataIngestionPage activeView="catalog" />),
+    element: page(<Navigate replace to="/data-catalog/catalog/data-ingestion" />),
   },
   {
     path: "data-ingestion/auto-scan",

@@ -10,6 +10,11 @@ export const dataCatalogEnUS = {
     title: "Data Catalog",
     description:
       "Browse and govern data resources. Filter by connection to inspect tables, views, and index status.",
+    ingestionCatalog: {
+      name: "Data Ingestion",
+      description: "Datasets and records generated through data ingestion.",
+      tag: "Ingested data",
+    },
     permissionRequired:
       "Your account does not have the required permission. Contact an administrator to request access.",
     loadErrorRefreshHint: "Please refresh the page and try again later.",

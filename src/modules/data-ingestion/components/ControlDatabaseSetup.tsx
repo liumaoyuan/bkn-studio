@@ -10,12 +10,32 @@ import {
   DatabaseOutlined,
   SafetyCertificateOutlined,
 } from "@ant-design/icons";
-import { Alert, Button, Card, Form, Input, Space, Switch, Tag, Typography } from "antd";
+import {
+  Alert,
+  Button,
+  Card,
+  Col,
+  Collapse,
+  Form,
+  Input,
+  InputNumber,
+  Row,
+  Space,
+  Switch,
+  Tag,
+  Typography,
+} from "antd";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { useAppServices } from "@/framework/context/use-app-services";
 import { extractRequestErrorMessage } from "@/framework/request/error-message";
+import {
+  buildMysqlConnectionUrl,
+  DEFAULT_CONTROL_DATABASE_NAME,
+  DEFAULT_MYSQL_PORT,
+  normalizeMysqlHost,
+} from "@/modules/data-ingestion/lib/mysql-connection-url";
 import { dataIngestionService } from "@/modules/data-ingestion/services/data-ingestion.service";
 import type {
   DataIngestionControlDatabaseRequest,
@@ -23,10 +43,22 @@ import type {
   DataIngestionControlDatabaseTestResult,
 } from "@/modules/data-ingestion/types/data-ingestion";
 
+import { DatabaseConnectionPicker } from "./DatabaseConnectionPicker";
 import styles from "./ControlDatabaseSetup.module.css";
 
 const { Paragraph, Text, Title } = Typography;
 const MYSQL_URL_PATTERN = /^(mysql|mariadb)\+pymysql:\/\//;
+const MYSQL_DATABASE_NAME_PATTERN = /^[A-Za-z0-9_]+$/;
+
+interface ControlDatabaseSetupValues {
+  bootstrap_database_url?: string;
+  create_database: boolean;
+  database_name: string;
+  host: string;
+  password: string;
+  port: number;
+  username: string;
+}
 
 export function ControlDatabaseSetup({
   status,
@@ -39,22 +71,19 @@ export function ControlDatabaseSetup({
 }) {
   const { t } = useTranslation();
   const { message } = useAppServices();
-  const [form] = Form.useForm<DataIngestionControlDatabaseRequest>();
+  const [form] = Form.useForm<ControlDatabaseSetupValues>();
   const [testing, setTesting] = useState(false);
   const [initializing, setInitializing] = useState(false);
+  const [operationError, setOperationError] = useState("");
   const [testResult, setTestResult] = useState<DataIngestionControlDatabaseTestResult | null>(null);
 
-  const validationRules = (required: boolean) => [
-    {
-      required,
-      message: t("dataIngestion.controlDatabase.required"),
-    },
+  const optionalBootstrapUrlRules = [
     {
       validator: (_rule: unknown, value?: string) => {
         if (!value || MYSQL_URL_PATTERN.test(value)) {
           return Promise.resolve();
         }
-        return Promise.reject(new Error(t("dataIngestion.controlDatabase.invalidUrl")));
+        return Promise.reject(new Error(t("dataIngestion.controlDatabase.invalidBootstrapUrl")));
       },
     },
   ];
@@ -62,7 +91,13 @@ export function ControlDatabaseSetup({
   async function readForm(): Promise<DataIngestionControlDatabaseRequest> {
     const values = await form.validateFields();
     return {
-      database_url: values.database_url.trim(),
+      database_url: buildMysqlConnectionUrl({
+        databaseName: values.database_name,
+        host: values.host,
+        password: values.password || "",
+        port: values.port,
+        username: values.username,
+      }),
       create_database: values.create_database,
       bootstrap_database_url: values.bootstrap_database_url?.trim() || undefined,
     };
@@ -70,17 +105,18 @@ export function ControlDatabaseSetup({
 
   async function testConnection() {
     setTesting(true);
+    setOperationError("");
     setTestResult(null);
     try {
       const result = await dataIngestionService.testControlDatabase(await readForm());
       setTestResult(result);
       message.success(t("dataIngestion.controlDatabase.testPassed"));
     } catch (error) {
-      message.error(
-        t("dataIngestion.controlDatabase.testFailed", {
-          message: extractRequestErrorMessage(error),
-        }),
-      );
+      const detail = t("dataIngestion.controlDatabase.testFailed", {
+        message: extractRequestErrorMessage(error),
+      });
+      setOperationError(detail);
+      message.error(detail);
     } finally {
       setTesting(false);
     }
@@ -88,16 +124,17 @@ export function ControlDatabaseSetup({
 
   async function initializeDatabase() {
     setInitializing(true);
+    setOperationError("");
     try {
       const nextStatus = await dataIngestionService.configureControlDatabase(await readForm());
       message.success(t("dataIngestion.controlDatabase.initialized"));
       await onInitialized(nextStatus);
     } catch (error) {
-      message.error(
-        t("dataIngestion.controlDatabase.initializeFailed", {
-          message: extractRequestErrorMessage(error),
-        }),
-      );
+      const detail = t("dataIngestion.controlDatabase.initializeFailed", {
+        message: extractRequestErrorMessage(error),
+      });
+      setOperationError(detail);
+      message.error(detail);
     } finally {
       setInitializing(false);
     }
@@ -129,14 +166,22 @@ export function ControlDatabaseSetup({
           />
         ) : null}
 
-        <Alert
-          description={t("dataIngestion.controlDatabase.securityHint")}
-          icon={<SafetyCertificateOutlined />}
-          message={t("dataIngestion.controlDatabase.onceHint")}
-          showIcon
-          style={{ marginBottom: 20 }}
-          type="info"
-        />
+        <div className={styles.connectionGuide}>
+          <Alert
+            description={t("dataIngestion.controlDatabase.connectionHelp")}
+            icon={<DatabaseOutlined />}
+            message={t("dataIngestion.controlDatabase.connectionGuide")}
+            showIcon
+            type="info"
+          />
+          <Alert
+            description={t("dataIngestion.controlDatabase.securityHint")}
+            icon={<SafetyCertificateOutlined />}
+            message={t("dataIngestion.controlDatabase.onceHint")}
+            showIcon
+            type="success"
+          />
+        </div>
 
         {!canManage ? (
           <Alert message={t("dataIngestion.controlDatabase.noPermission")} showIcon type="error" />
@@ -145,43 +190,173 @@ export function ControlDatabaseSetup({
             form={form}
             initialValues={{
               create_database: true,
+              database_name: DEFAULT_CONTROL_DATABASE_NAME,
+              host: "",
+              password: "",
+              port: DEFAULT_MYSQL_PORT,
+              username: "",
               bootstrap_database_url: "",
             }}
             layout="vertical"
+            onValuesChange={() => {
+              setOperationError("");
+              setTestResult(null);
+            }}
             requiredMark="optional"
           >
-            <Form.Item
-              extra={t("dataIngestion.controlDatabase.applicationUrlHint")}
-              label={t("dataIngestion.controlDatabase.applicationUrl")}
-              name="database_url"
-              rules={validationRules(true)}
-            >
-              <Input.Password
-                autoComplete="new-password"
-                placeholder={t("dataIngestion.controlDatabase.applicationUrlPlaceholder")}
-              />
-            </Form.Item>
+            <DatabaseConnectionPicker form={form} />
+
+            <Row gutter={16}>
+              <Col sm={17} xs={24}>
+                <Form.Item
+                  extra={t("dataIngestion.controlDatabase.hostHint")}
+                  label={t("dataIngestion.controlDatabase.host")}
+                  name="host"
+                  rules={[
+                    {
+                      validator: (_rule: unknown, value?: string) => {
+                        const host = normalizeMysqlHost(value || "");
+                        if (!host) {
+                          return Promise.reject(
+                            new Error(t("dataIngestion.controlDatabase.hostRequired")),
+                          );
+                        }
+                        if (/[\s/?#@]/.test(host)) {
+                          return Promise.reject(
+                            new Error(t("dataIngestion.controlDatabase.hostInvalid")),
+                          );
+                        }
+                        return Promise.resolve();
+                      },
+                    },
+                  ]}
+                >
+                  <Input
+                    autoComplete="off"
+                    placeholder={t("dataIngestion.controlDatabase.hostPlaceholder")}
+                  />
+                </Form.Item>
+              </Col>
+              <Col sm={7} xs={24}>
+                <Form.Item
+                  extra={t("dataIngestion.controlDatabase.portHint")}
+                  label={t("dataIngestion.controlDatabase.port")}
+                  name="port"
+                  rules={[
+                    {
+                      required: true,
+                      message: t("dataIngestion.controlDatabase.portInvalid"),
+                    },
+                  ]}
+                >
+                  <InputNumber
+                    className={styles.portInput}
+                    controls={false}
+                    max={65535}
+                    min={1}
+                    precision={0}
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
+
+            <Row gutter={16}>
+              <Col sm={12} xs={24}>
+                <Form.Item
+                  extra={t("dataIngestion.controlDatabase.databaseNameHint")}
+                  label={t("dataIngestion.controlDatabase.databaseNameLabel")}
+                  name="database_name"
+                  rules={[
+                    {
+                      required: true,
+                      message: t("dataIngestion.controlDatabase.databaseNameRequired"),
+                    },
+                    {
+                      pattern: MYSQL_DATABASE_NAME_PATTERN,
+                      message: t("dataIngestion.controlDatabase.databaseNameInvalid"),
+                    },
+                  ]}
+                >
+                  <Input
+                    autoComplete="off"
+                    placeholder={t("dataIngestion.controlDatabase.databaseNamePlaceholder")}
+                  />
+                </Form.Item>
+              </Col>
+              <Col sm={12} xs={24}>
+                <Form.Item
+                  extra={t("dataIngestion.controlDatabase.usernameHint")}
+                  label={t("dataIngestion.controlDatabase.username")}
+                  name="username"
+                  rules={[
+                    {
+                      required: true,
+                      whitespace: true,
+                      message: t("dataIngestion.controlDatabase.usernameRequired"),
+                    },
+                  ]}
+                >
+                  <Input
+                    autoComplete="username"
+                    placeholder={t("dataIngestion.controlDatabase.usernamePlaceholder")}
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
 
             <Form.Item
-              extra={t("dataIngestion.controlDatabase.bootstrapUrlHint")}
-              label={t("dataIngestion.controlDatabase.bootstrapUrl")}
-              name="bootstrap_database_url"
-              rules={validationRules(false)}
+              extra={t("dataIngestion.controlDatabase.passwordHint")}
+              label={t("dataIngestion.controlDatabase.password")}
+              name="password"
             >
               <Input.Password
                 autoComplete="new-password"
-                placeholder={t("dataIngestion.controlDatabase.bootstrapUrlPlaceholder")}
+                placeholder={t("dataIngestion.controlDatabase.passwordPlaceholder")}
               />
             </Form.Item>
 
             <Form.Item
               extra={t("dataIngestion.controlDatabase.createDatabaseHint")}
-              label={t("dataIngestion.controlDatabase.createDatabase")}
+              label={t("dataIngestion.controlDatabase.autoCreateDatabase")}
               name="create_database"
               valuePropName="checked"
             >
               <Switch />
             </Form.Item>
+
+            <Collapse
+              className={styles.advanced}
+              ghost
+              items={[
+                {
+                  key: "bootstrap",
+                  label: t("dataIngestion.controlDatabase.advancedTitle"),
+                  children: (
+                    <Form.Item
+                      extra={t("dataIngestion.controlDatabase.bootstrapUrlHint")}
+                      label={t("dataIngestion.controlDatabase.bootstrapUrl")}
+                      name="bootstrap_database_url"
+                      rules={optionalBootstrapUrlRules}
+                    >
+                      <Input.Password
+                        autoComplete="new-password"
+                        placeholder={t("dataIngestion.controlDatabase.bootstrapUrlPlaceholder")}
+                      />
+                    </Form.Item>
+                  ),
+                },
+              ]}
+            />
+
+            {operationError ? (
+              <Alert
+                className={styles.operationError}
+                description={t("dataIngestion.controlDatabase.connectionTroubleshooting")}
+                message={operationError}
+                showIcon
+                type="error"
+              />
+            ) : null}
 
             {testResult ? (
               <Alert

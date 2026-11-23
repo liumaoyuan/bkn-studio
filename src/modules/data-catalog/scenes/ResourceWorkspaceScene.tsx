@@ -44,6 +44,10 @@ import {
   getCatalogResource,
   setCatalogResourceEnabled,
 } from "@/modules/data-catalog/services/resource.service";
+import {
+  DATA_INGESTION_CATALOG_ID,
+  getIngestionCatalogRecord,
+} from "@/modules/data-catalog/services/ingestion-catalog.service";
 import type { BuildTask, CatalogResource } from "@/modules/data-catalog/types/data-catalog";
 import { hasCatalogResourceOperation } from "@/modules/data-catalog/utils/resource-operations";
 import { getCatalog, hasCatalogOperation } from "@/shared/catalog";
@@ -121,14 +125,15 @@ export function ResourceWorkspaceScene({
         return;
       }
 
-      const catalogRecord = await getCatalog(detail.catalogId, { skipErrorToast: true }).catch(
-        (error) => {
-          if (isRequestForbidden(error)) {
-            return null;
-          }
-          throw error;
-        },
-      );
+      const catalogRecord =
+        detail.catalogId === DATA_INGESTION_CATALOG_ID
+          ? await getIngestionCatalogRecord()
+          : await getCatalog(detail.catalogId, { skipErrorToast: true }).catch((error) => {
+              if (isRequestForbidden(error)) {
+                return null;
+              }
+              throw error;
+            });
       let latestTasks: BuildTask[] = [];
       let taskLoadFailed = false;
       if (detail.category !== "logical_view" && hasCatalogOperation(catalogRecord, "task_manage")) {

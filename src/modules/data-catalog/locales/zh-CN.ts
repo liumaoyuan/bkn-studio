@@ -9,6 +9,11 @@ export const dataCatalogZhCN = {
   dataCatalog: {
     title: "数据目录",
     description: "浏览与治理数据资源，按连接查看表、视图与索引状态。",
+    ingestionCatalog: {
+      name: "数据入库",
+      description: "统一展示通过数据入库生成的数据集及其记录。",
+      tag: "入库数据",
+    },
     permissionRequired: "当前账号权限不足，请联系管理员授权后再试。",
     loadErrorRefreshHint: "请稍后刷新页面再试。",
     catalogDetailTitle: "资源列表",

@@ -42,6 +42,10 @@
   padding-top: 4px;
 }
 
+.fullWidth {
+  width: 100%;
+}
+
 .detailCard {
   border-color: var(--ant-color-border-secondary);
   box-shadow: var(--ant-box-shadow-secondary);

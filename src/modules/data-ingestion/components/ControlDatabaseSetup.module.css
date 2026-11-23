@@ -45,6 +45,32 @@
   font-size: 23px;
 }
 
+.connectionGuide {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 22px;
+}
+
+.portInput {
+  width: 100%;
+}
+
+.advanced {
+  margin: 4px 0 0;
+  padding: 0 16px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: var(--ant-border-radius-lg);
+  background: var(--ant-color-fill-quaternary);
+}
+
+.advanced :global(.ant-collapse-header) {
+  font-weight: 500;
+}
+
+.operationError {
+  margin-top: 20px;
+}
+
 .testResult {
   margin-top: 20px;
 }

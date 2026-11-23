@@ -23,6 +23,8 @@ export const dataConnectModuleManifest = {
     "vega-backend/connector-types",
     "vega-backend/discover-schedules",
     "vega-backend/discover-tasks",
+    "data-ingestion/bootstrap",
+    "data-ingestion/spaces",
   ],
   scenes: [
     {

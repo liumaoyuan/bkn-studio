@@ -34,6 +34,10 @@ import {
   isCatalogDiscovering,
   listCatalogDiscovers,
 } from "@/modules/data-catalog/services/resource.service";
+import {
+  DATA_INGESTION_CATALOG_ID,
+  getIngestionCatalogRecord,
+} from "@/modules/data-catalog/services/ingestion-catalog.service";
 import type { CatalogDiscoverRecord } from "@/modules/data-catalog/types/data-catalog";
 import {
   getCatalog,
@@ -175,7 +179,7 @@ export function DataCatalogScene({ selection, suppressAutoSelect = false }: Data
       generation = catalogQueryGeneration.current,
       applyKeyword = false,
     ) => {
-      const [logicalCatalogResult, statsResult] = await Promise.all([
+      const [logicalCatalogResult, statsResult, ingestionCatalog] = await Promise.all([
         listCatalogs({
           direction: "asc",
           keyword,
@@ -185,6 +189,7 @@ export function DataCatalogScene({ selection, suppressAutoSelect = false }: Data
           type: "logical",
         }),
         listCatalogConnectorTypeStats(keyword),
+        getIngestionCatalogRecord(keyword),
       ]);
       if (generation !== catalogQueryGeneration.current) {
         return false;
@@ -203,20 +208,36 @@ export function DataCatalogScene({ selection, suppressAutoSelect = false }: Data
       logicalCatalogResult.items.forEach((catalog) =>
         hydratedCatalogIds.current.delete(catalog.id),
       );
-      setCatalogs((current) =>
-        mergeCatalogPage(
+      setCatalogs((current) => {
+        const merged = mergeCatalogPage(
           preservePhysicalCatalogs ? current : [],
           logicalCatalogResult.items,
           "logical",
           "",
           true,
           hydratedCatalogIds.current,
-        ),
-      );
+        ).filter((catalog) => catalog.id !== DATA_INGESTION_CATALOG_ID);
+        return ingestionCatalog ? [ingestionCatalog, ...merged] : merged;
+      });
       if (applyKeyword) {
         setCatalogKeyword(keyword);
       }
-      setConnectorTypeStats(statsResult);
+      setConnectorTypeStats(
+        ingestionCatalog
+          ? [
+              ...statsResult.filter(
+                (item) => item.connectorType !== ingestionCatalog.connectorType,
+              ),
+              {
+                catalogCount:
+                  (statsResult.find((item) => item.connectorType === ingestionCatalog.connectorType)
+                    ?.catalogCount ?? 0) + 1,
+                catalogType: "physical",
+                connectorType: ingestionCatalog.connectorType,
+              },
+            ]
+          : statsResult,
+      );
       return true;
     },
     [],
@@ -318,7 +339,11 @@ export function DataCatalogScene({ selection, suppressAutoSelect = false }: Data
   );
 
   const loadDiscovers = useCallback(async () => {
-    if (!selectedCatalog || isCatalogSummaryOnly(selectedCatalog)) {
+    if (
+      !selectedCatalog ||
+      selectedCatalog.id === DATA_INGESTION_CATALOG_ID ||
+      isCatalogSummaryOnly(selectedCatalog)
+    ) {
       setDiscovers([]);
       return;
     }
