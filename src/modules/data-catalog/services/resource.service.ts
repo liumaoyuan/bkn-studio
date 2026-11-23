@@ -526,6 +526,21 @@ export async function listCatalogResourcePage(
   if (query.catalogId === DATA_INGESTION_CATALOG_ID) {
     return listIngestionCatalogResources(query);
   }
+  // 数据入库的数据集挂在它们所属的数据连接下：列出该连接资源时一并合并进来。
+  const ingestionPage =
+    query.catalogId && query.catalogId !== DATA_INGESTION_CATALOG_ID
+      ? await listIngestionCatalogResources({ ...query, limit: -1, offset: 0 })
+      : { items: [], total: 0 };
+  const mergeIngestionResources = (page: CatalogResourcePage): CatalogResourcePage => {
+    if (ingestionPage.items.length === 0) {
+      return page;
+    }
+    const items = [...page.items, ...ingestionPage.items];
+    return {
+      items: query.sort === "name" ? sortResources(items, query) : items,
+      total: page.total + ingestionPage.total,
+    };
+  };
   const offset = Math.max(0, query.offset ?? 0);
   const limit = query.limit ?? RESOURCE_LIST_PAGE_SIZE;
 
@@ -543,7 +558,7 @@ export async function listCatalogResourcePage(
         sourceMetadata: undefined,
       })),
       total: filtered.length,
-    });
+    }).then(mergeIngestionResources);
   }
 
   const response = await http.get<ListResponse<BackendResourceSummary>>(
@@ -565,10 +580,10 @@ export async function listCatalogResourcePage(
     },
   );
 
-  return {
+  return mergeIngestionResources({
     items: response.data.entries.map(mapResource),
     total: response.data.total_count,
-  };
+  });
 }
 
 export async function countCatalogResources(query: ResourceListQuery = {}): Promise<number> {

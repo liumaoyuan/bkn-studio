@@ -10,8 +10,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getIngestionCatalogResources,
   listIngestionCatalogResources,
+  matchIngestionSpaceCatalog,
   previewIngestionCatalogResource,
 } from "@/modules/data-catalog/services/ingestion-catalog.service";
+import type { CatalogRecord } from "@/shared/catalog/types";
 
 const httpGetMock = vi.hoisted(() => vi.fn());
 
@@ -116,5 +118,65 @@ describe("ingestion catalog adapter", () => {
       rows: [{ station: "A1", temperature: 22.4 }],
       total: 12,
     });
+  });
+});
+
+const catalogRecord = (overrides: Partial<CatalogRecord> = {}): CatalogRecord => ({
+  builtin: false,
+  category: "physical",
+  connectorConfig: {
+    database: "bkn",
+    host: "10.31.112.10",
+    password: "secret",
+    port: 3306,
+    username: "root",
+  },
+  connectorType: "mysql",
+  createTime: "",
+  creatorName: "",
+  description: "",
+  enabled: true,
+  expectedUpdateTime: 0,
+  healthCheckResult: "",
+  healthStatus: "healthy",
+  id: "catalog-bkn",
+  lastCheckTime: "",
+  metadata: {},
+  mode: "local",
+  name: "bkn",
+  operations: ["view_detail"],
+  status: "enabled",
+  tags: [],
+  type: "physical",
+  updateTime: "",
+  updaterName: "",
+  ...overrides,
+});
+
+describe("ingestion catalog binding to data connections", () => {
+  it("matches a space to the data connection with the same database", () => {
+    expect(
+      matchIngestionSpaceCatalog(
+        { name: "Default data space", database_label: "mysql://10.31.112.10:3306/bkn" },
+        [catalogRecord()],
+      ),
+    ).toBe("catalog-bkn");
+  });
+
+  it("falls back to the catalog name when the label has no host", () => {
+    expect(
+      matchIngestionSpaceCatalog({ name: "bkn", database_label: "bkn" }, [
+        catalogRecord({ connectorConfig: {}, id: "catalog-named", name: "bkn" }),
+      ]),
+    ).toBe("catalog-named");
+  });
+
+  it("returns null when no data connection matches the space", () => {
+    expect(
+      matchIngestionSpaceCatalog(
+        { name: "Other space", database_label: "mysql://10.31.112.10:3306/other" },
+        [catalogRecord()],
+      ),
+    ).toBeNull();
   });
 });
