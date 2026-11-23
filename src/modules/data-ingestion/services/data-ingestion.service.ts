@@ -19,6 +19,9 @@ import type {
   DataIngestionAgentSkill,
   DataIngestionAgentStatus,
   DataIngestionAutoScanJob,
+  DataIngestionControlDatabaseRequest,
+  DataIngestionControlDatabaseStatus,
+  DataIngestionControlDatabaseTestResult,
   DataIngestionDataSource,
   DataIngestionDataset,
   DataIngestionDatasetRecord,
@@ -32,13 +35,16 @@ import type {
 } from "@/modules/data-ingestion/types/data-ingestion";
 
 const PREFIX = "/data-ingestion";
-let activeDataSpaceId = "default";
+let activeDataSpaceId = "";
 
 export function setDataIngestionSpace(spaceId: string) {
-  activeDataSpaceId = spaceId || "default";
+  activeDataSpaceId = spaceId.trim();
 }
 
 function scopedConfig(config: AxiosRequestConfig = {}): AxiosRequestConfig {
+  if (!activeDataSpaceId) {
+    throw new Error("请选择数据空间");
+  }
   return {
     ...config,
     headers: {
@@ -59,6 +65,19 @@ const scopedHttp = {
 };
 
 export const dataIngestionService = {
+  getControlDatabaseStatus: () =>
+    http.get<DataIngestionControlDatabaseStatus>(`${PREFIX}/bootstrap/status`).then((r) => r.data),
+
+  testControlDatabase: (payload: DataIngestionControlDatabaseRequest) =>
+    http
+      .post<DataIngestionControlDatabaseTestResult>(`${PREFIX}/bootstrap/test`, payload)
+      .then((r) => r.data),
+
+  configureControlDatabase: (payload: DataIngestionControlDatabaseRequest) =>
+    http
+      .post<DataIngestionControlDatabaseStatus>(`${PREFIX}/bootstrap/control-database`, payload)
+      .then((r) => r.data),
+
   listDataSpaces: () => http.get<DataIngestionSpace[]>(`${PREFIX}/spaces`).then((r) => r.data),
 
   createDataSpace: (payload: { name: string; slug: string; database_url: string }) =>

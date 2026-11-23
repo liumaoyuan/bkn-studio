@@ -13,16 +13,75 @@ export const dataIngestionEnUS = {
     title: "Multi-source Data Ingestion",
     description:
       "Connect files and multi-source data, run a traceable cleaning pipeline, persist independent datasets, and operate through the Agent and its tools.",
+    controlDatabase: {
+      checking: "Checking the data ingestion control database…",
+      title: "Initialize the control database",
+      requiredTag: "Administrator setup",
+      description:
+        "The control database stores data spaces, ingestion runs, and Agent information. Data ingestion is enabled after initialization.",
+      onceHint:
+        "Administrators can change the control database later. Switching does not automatically migrate data from the old database.",
+      securityHint:
+        "Use a least-privilege MySQL/MariaDB application account. The connection URL is encrypted in a persistent volume and its password is never shown again.",
+      configReadError: "The existing control database configuration cannot be read",
+      noPermission:
+        "Your account cannot initialize the control database. Contact a platform administrator.",
+      applicationUrl: "Application database connection URL",
+      applicationUrlPlaceholder:
+        "mysql+pymysql://data_app:***@db.internal:3306/data_ingestion?charset=utf8mb4",
+      applicationUrlHint:
+        "The ingestion service uses this account. The target database may already exist or can be created with the optional bootstrap connection below.",
+      bootstrapUrl: "Database creation connection URL (optional)",
+      bootstrapUrlPlaceholder: "mysql+pymysql://dba:***@db.internal:3306/mysql",
+      bootstrapUrlHint:
+        "Only needed when the target database must be created. This account is used once and is never stored.",
+      createDatabase: "Create the database if it does not exist",
+      createDatabaseHint:
+        "The application account must be allowed to create tables and read/write the target database. In production, let a DBA pre-create and grant access.",
+      required: "Enter a database connection URL",
+      invalidUrl: "Use a mysql+pymysql:// or mariadb+pymysql:// connection URL",
+      test: "Test connection",
+      testPassed: "Database connection succeeded",
+      testFailed: "Database connection failed: {{message}}",
+      databaseName: "Target database: {{name}}",
+      databaseExists: "The database exists and is ready for initialization.",
+      databaseMissing:
+        "The database does not exist yet. It will be created during initialization when automatic creation is enabled.",
+      initialize: "Create and initialize",
+      initialized: "Control database initialized. Data ingestion is now enabled.",
+      initializeFailed: "Control database initialization failed: {{message}}",
+      change: "Change control database",
+      changeTitle: "Change data ingestion control database",
+      changeDescription:
+        "Saving immediately switches the active control database and reloads its data spaces, runs, and datasets.",
+      changeAlert: "Switching does not migrate data from the old database",
+      changeWarning:
+        "The old control database and its data remain in place but are no longer shown in this platform. Back up and migrate the data first when it must be retained.",
+      environmentManaged:
+        "The control database is managed by deployment environment variables and cannot be changed here.",
+      confirmSwitch:
+        "I understand that switching control databases does not migrate data from the old database",
+      switch: "Save and switch",
+      switched: "Control database switched",
+      switchFailed: "Control database switch failed: {{message}}",
+      disabled: "Frontend control database initialization is disabled by deployment configuration.",
+      statusUnavailable: "Unable to read the control database status",
+    },
     spaces: {
       current: "Current data space",
       create: "Create data space",
+      required: "Create and select an external database first",
+      emptyHint:
+        "Datasets, runs, sources, and normalized records are stored only in the external MySQL/MariaDB you select. Create a data space with its database connection first.",
+      selectPlaceholder: "Select external database",
       created: "Data space created",
       name: "Space name",
       namePlaceholder: "For example: Marine observations",
       slug: "Space identifier",
       database: "Target database",
       databaseUrl: "Database connection URL",
-      isolationHint: "Each data space uses an independent database",
+      databaseUrlPlaceholder: "mysql+pymysql://user:password@host:3306/data_marine?charset=utf8mb4",
+      isolationHint: "Each data space uses an independent external MySQL/MariaDB database",
       databaseHint:
         "Create the target MySQL/MariaDB database first. Required tables will be initialized automatically. The database password is encrypted and will not be shown again.",
     },

@@ -10,6 +10,28 @@ export type DataIngestionView =
 
 export type JsonObject = Record<string, unknown>;
 
+export interface DataIngestionControlDatabaseStatus {
+  configured: boolean;
+  initialized: boolean;
+  source: string;
+  database_label: string;
+  error: string;
+  bootstrap_enabled: boolean;
+}
+
+export interface DataIngestionControlDatabaseRequest {
+  database_url: string;
+  create_database: boolean;
+  bootstrap_database_url?: string;
+}
+
+export interface DataIngestionControlDatabaseTestResult {
+  connected: boolean;
+  database_exists: boolean;
+  database_name: string;
+  database_label: string;
+}
+
 export interface DataIngestionSpace {
   id: string;
   name: string;

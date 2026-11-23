@@ -21,6 +21,7 @@ export const dataIngestionModuleManifest = {
   supportsEmbedded: true,
   supportsReadOnly: false,
   services: [
+    "data-ingestion/bootstrap",
     "data-ingestion/spaces",
     "data-ingestion/overview",
     "data-ingestion/sources",

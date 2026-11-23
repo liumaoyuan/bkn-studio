@@ -40,6 +40,30 @@ describe("data-ingestion service", () => {
     });
   });
 
+  it("checks and initializes the control database without a data space", async () => {
+    await dataIngestionService.getControlDatabaseStatus();
+    await dataIngestionService.testControlDatabase({
+      database_url: "mysql+pymysql://user:secret@db:3306/data_ingestion",
+      create_database: true,
+    });
+    await dataIngestionService.configureControlDatabase({
+      database_url: "mysql+pymysql://user:secret@db:3306/data_ingestion",
+      create_database: true,
+      bootstrap_database_url: "mysql+pymysql://admin:secret@db:3306/mysql",
+    });
+
+    expect(http.get).toHaveBeenNthCalledWith(1, "/data-ingestion/bootstrap/status");
+    expect(http.post).toHaveBeenNthCalledWith(1, "/data-ingestion/bootstrap/test", {
+      database_url: "mysql+pymysql://user:secret@db:3306/data_ingestion",
+      create_database: true,
+    });
+    expect(http.post).toHaveBeenNthCalledWith(2, "/data-ingestion/bootstrap/control-database", {
+      database_url: "mysql+pymysql://user:secret@db:3306/data_ingestion",
+      create_database: true,
+      bootstrap_database_url: "mysql+pymysql://admin:secret@db:3306/mysql",
+    });
+  });
+
   it("uploads files as multipart form data without overriding auth headers", async () => {
     const file = new File(["a,b\n1,2"], "sample.csv", { type: "text/csv" });
 
@@ -72,5 +96,12 @@ describe("data-ingestion service", () => {
     expect(http.get).toHaveBeenCalledWith("/data-ingestion/agent/status", {
       headers: { "x-data-ingestion-space": "marine" },
     });
+  });
+
+  it("rejects scoped requests when no data space is selected", () => {
+    setDataIngestionSpace("");
+
+    expect(() => dataIngestionService.overview()).toThrow("请选择数据空间");
+    expect(http.get).not.toHaveBeenCalled();
   });
 });

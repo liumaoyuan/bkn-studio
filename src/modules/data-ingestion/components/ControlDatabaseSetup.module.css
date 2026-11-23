@@ -1,0 +1,72 @@
+/**
+ * Copyright (c) 2026 OpenBKN
+ * SPDX-License-Identifier: LicenseRef-OpenBKN
+ * Licensed under the OpenBKN License, a modified Apache 2.0 with Additional
+ * Conditions. See LICENSE for the full text.
+ */
+
+.page {
+  display: flex;
+  min-height: 100%;
+  align-items: flex-start;
+  justify-content: center;
+  padding: clamp(12px, 3vw, 40px) 0;
+}
+
+.card {
+  width: min(920px, 100%);
+  border-color: var(--ant-color-border-secondary);
+  background:
+    radial-gradient(circle at 100% 0, var(--ant-color-primary-bg), transparent 36%),
+    var(--ant-color-bg-container);
+  box-shadow: var(--ant-box-shadow-secondary);
+}
+
+.heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+  margin-bottom: 22px;
+}
+
+.heading h2 {
+  margin: 0 0 4px;
+}
+
+.icon {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  place-items: center;
+  border-radius: 14px;
+  color: var(--ant-color-primary);
+  background: var(--ant-color-primary-bg);
+  font-size: 23px;
+}
+
+.testResult {
+  margin-top: 20px;
+}
+
+.actions {
+  margin-top: 24px;
+}
+
+.modalContent {
+  width: 100%;
+}
+
+@media (max-width: 640px) {
+  .heading {
+    flex-direction: column;
+  }
+
+  .actions {
+    width: 100%;
+  }
+
+  .actions :global(.ant-btn) {
+    flex: 1;
+  }
+}

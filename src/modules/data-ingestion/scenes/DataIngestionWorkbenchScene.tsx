@@ -52,6 +52,8 @@ import { useTranslation } from "react-i18next";
 import { useAppServices } from "@/framework/context/use-app-services";
 import { useRuntimeConfig } from "@/framework/context/use-runtime-config";
 import { extractRequestErrorMessage } from "@/framework/request/error-message";
+import { ControlDatabaseSetup } from "@/modules/data-ingestion/components/ControlDatabaseSetup";
+import { ControlDatabaseSwitchModal } from "@/modules/data-ingestion/components/ControlDatabaseSwitchModal";
 import { IngestionAgentPanel } from "@/modules/data-ingestion/components/IngestionAgentPanel";
 import type { DataIngestionWorkbenchSceneProps } from "@/modules/data-ingestion/contracts/scenes";
 import {
@@ -60,6 +62,7 @@ import {
 } from "@/modules/data-ingestion/services/data-ingestion.service";
 import type {
   DataIngestionAutoScanJob,
+  DataIngestionControlDatabaseStatus,
   DataIngestionDataSource,
   DataIngestionDataset,
   DataIngestionDatasetRecord,
@@ -389,8 +392,13 @@ export function DataIngestionWorkbenchScene({
   const [runSearch, setRunSearch] = useState("");
   const [runStatus, setRunStatus] = useState("");
   const [scanJobs, setScanJobs] = useState<DataIngestionAutoScanJob[]>([]);
+  const [controlDatabaseStatus, setControlDatabaseStatus] =
+    useState<DataIngestionControlDatabaseStatus | null>(null);
+  const [controlDatabaseLoading, setControlDatabaseLoading] = useState(true);
+  const [controlDatabaseError, setControlDatabaseError] = useState("");
+  const [controlDatabaseModalOpen, setControlDatabaseModalOpen] = useState(false);
   const [spaces, setSpaces] = useState<DataIngestionSpace[]>([]);
-  const [activeSpaceId, setActiveSpaceId] = useState("default");
+  const [activeSpaceId, setActiveSpaceId] = useState("");
   const [spacesReady, setSpacesReady] = useState(false);
   const [spaceModalOpen, setSpaceModalOpen] = useState(false);
   const [creatingSpace, setCreatingSpace] = useState(false);
@@ -495,6 +503,9 @@ export function DataIngestionWorkbenchScene({
 
   const loadCore = useCallback(
     async (silent = false) => {
+      if (!activeSpaceId) {
+        return;
+      }
       if (!silent) {
         setLoading(true);
       } else {
@@ -533,10 +544,14 @@ export function DataIngestionWorkbenchScene({
         setRefreshing(false);
       }
     },
-    [message, t],
+    [activeSpaceId, message, t],
   );
 
   const loadScanJobs = useCallback(async () => {
+    if (!activeSpaceId) {
+      setScanJobs([]);
+      return;
+    }
     try {
       const next = await dataIngestionService.listScanJobs();
       setScanJobs(next);
@@ -547,11 +562,11 @@ export function DataIngestionWorkbenchScene({
         }),
       );
     }
-  }, [message, t]);
+  }, [activeSpaceId, message, t]);
 
   const loadRecords = useCallback(
     async (datasetId = selectedCatalogDatasetId, page = recordsPage) => {
-      if (!datasetId) {
+      if (!activeSpaceId || !datasetId) {
         setRecords([]);
         setRecordsTotal(0);
         return;
@@ -575,64 +590,86 @@ export function DataIngestionWorkbenchScene({
         setRecordsLoading(false);
       }
     },
-    [message, recordSearch, recordsPage, selectedCatalogDatasetId, t],
+    [activeSpaceId, message, recordSearch, recordsPage, selectedCatalogDatasetId, t],
   );
+
+  const loadDataSpaces = useCallback(async () => {
+    try {
+      const nextSpaces = await dataIngestionService.listDataSpaces();
+      const storedSpaceId = window.localStorage.getItem("data-ingestion.active-space");
+      const selected =
+        nextSpaces.find((space) => space.id === storedSpaceId) ??
+        nextSpaces.find((space) => space.is_default) ??
+        nextSpaces[0];
+      if (selected) {
+        setDataIngestionSpace(selected.id);
+        setActiveSpaceId(selected.id);
+      }
+      setSpaces(nextSpaces);
+      setSpacesReady(true);
+      setControlDatabaseError("");
+    } catch (error) {
+      setSpacesReady(true);
+      throw error;
+    }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
+    setControlDatabaseLoading(true);
     void dataIngestionService
-      .listDataSpaces()
-      .then((nextSpaces) => {
+      .getControlDatabaseStatus()
+      .then(async (status) => {
         if (cancelled) {
           return;
         }
-        const storedSpaceId = window.localStorage.getItem("data-ingestion.active-space");
-        const selected =
-          nextSpaces.find((space) => space.id === storedSpaceId) ??
-          nextSpaces.find((space) => space.is_default) ??
-          nextSpaces[0];
-        if (selected) {
-          setDataIngestionSpace(selected.id);
-          setActiveSpaceId(selected.id);
+        setControlDatabaseStatus(status);
+        if (!status.initialized) {
+          setControlDatabaseError("");
+          return;
         }
-        setSpaces(nextSpaces);
-        setSpacesReady(true);
+        await loadDataSpaces();
       })
       .catch((error) => {
         if (!cancelled) {
           setSpacesReady(true);
-          message.error(
+          setControlDatabaseError(
             t("dataIngestion.errors.load", {
               message: extractRequestErrorMessage(error),
             }),
           );
         }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setControlDatabaseLoading(false);
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, [message, t]);
+  }, [loadDataSpaces, message, t]);
 
   useEffect(() => {
-    if (spacesReady) {
+    if (spacesReady && activeSpaceId) {
       void loadCore();
     }
   }, [activeSpaceId, loadCore, spacesReady]);
 
   useEffect(() => {
-    if (spacesReady && activeView === "auto-scan") {
+    if (spacesReady && activeSpaceId && activeView === "auto-scan") {
       void loadScanJobs();
     }
   }, [activeSpaceId, activeView, loadScanJobs, spacesReady]);
 
   useEffect(() => {
-    if (spacesReady && activeView === "catalog") {
+    if (spacesReady && activeSpaceId && activeView === "catalog") {
       void loadRecords(selectedCatalogDatasetId, 1);
     }
   }, [activeSpaceId, activeView, loadRecords, selectedCatalogDatasetId, spacesReady]);
 
   useEffect(() => {
-    if (!spacesReady) {
+    if (!spacesReady || !activeSpaceId) {
       return;
     }
     if (!runId) {
@@ -755,6 +792,38 @@ export function DataIngestionWorkbenchScene({
       );
     } finally {
       setCreatingSpace(false);
+    }
+  }
+
+  async function handleControlDatabaseInitialized(status: DataIngestionControlDatabaseStatus) {
+    setControlDatabaseStatus(status);
+    setDataIngestionSpace("");
+    setActiveSpaceId("");
+    setSpaces([]);
+    setSpacesReady(false);
+    setOverview(null);
+    setStorageInfo(null);
+    setSources([]);
+    setDatasets([]);
+    setTemplates([]);
+    setRuns([]);
+    setScanJobs([]);
+    setRecords([]);
+    setRecordsTotal(0);
+    setSelectedDatasetId("");
+    setSelectedCatalogDatasetId("");
+    setSelectedSourceId("");
+    setCreatedRun(null);
+    setRouteRun(null);
+    setDrawerRun(null);
+    try {
+      await loadDataSpaces();
+    } catch (error) {
+      const detail = t("dataIngestion.errors.load", {
+        message: extractRequestErrorMessage(error),
+      });
+      setControlDatabaseError(detail);
+      message.error(detail);
     }
   }
 
@@ -1875,6 +1944,42 @@ export function DataIngestionWorkbenchScene({
       ),
   } as const;
 
+  if (controlDatabaseLoading) {
+    return (
+      <Card loading>
+        <Title level={2}>{t("dataIngestion.controlDatabase.checking")}</Title>
+      </Card>
+    );
+  }
+
+  if (!controlDatabaseStatus) {
+    return (
+      <Card>
+        <Alert
+          action={
+            <Button onClick={() => window.location.reload()}>
+              {t("dataIngestion.actions.refresh")}
+            </Button>
+          }
+          description={controlDatabaseError}
+          message={t("dataIngestion.controlDatabase.statusUnavailable")}
+          showIcon
+          type="error"
+        />
+      </Card>
+    );
+  }
+
+  if (!controlDatabaseStatus.initialized) {
+    return (
+      <ControlDatabaseSetup
+        canManage={can("data_ingestion:task_manage")}
+        onInitialized={handleControlDatabaseInitialized}
+        status={controlDatabaseStatus}
+      />
+    );
+  }
+
   return (
     <div className={styles.workbench} data-loading={loading || undefined}>
       <div className={styles.header}>
@@ -1893,6 +1998,7 @@ export function DataIngestionWorkbenchScene({
                 label: space.name,
                 value: space.id,
               }))}
+              placeholder={t("dataIngestion.spaces.selectPlaceholder")}
               value={activeSpaceId}
             />
             <Button
@@ -1909,10 +2015,22 @@ export function DataIngestionWorkbenchScene({
               {activeSpace.database_label}
             </Tag>
           ) : null}
+          <Button
+            disabled={
+              !can("data_ingestion:task_manage") ||
+              controlDatabaseStatus.source === "environment" ||
+              !controlDatabaseStatus.bootstrap_enabled
+            }
+            icon={<DatabaseOutlined />}
+            onClick={() => setControlDatabaseModalOpen(true)}
+          >
+            {t("dataIngestion.controlDatabase.change")}
+          </Button>
           <Tag icon={<RobotOutlined />} color="blue">
             MCP
           </Tag>
           <Button
+            disabled={!activeSpaceId}
             icon={<ReloadOutlined spin={refreshing} />}
             loading={refreshing}
             onClick={() => void loadCore(true)}
@@ -1922,14 +2040,50 @@ export function DataIngestionWorkbenchScene({
         </Space>
       </div>
 
+      {spacesReady && !activeSpaceId ? (
+        <Alert
+          action={
+            <Button
+              disabled={!can("data_ingestion:task_manage")}
+              onClick={() => setSpaceModalOpen(true)}
+              type="primary"
+            >
+              {t("dataIngestion.spaces.create")}
+            </Button>
+          }
+          description={t("dataIngestion.spaces.emptyHint")}
+          message={t("dataIngestion.spaces.required")}
+          showIcon
+          type="warning"
+        />
+      ) : null}
+      {controlDatabaseError ? (
+        <Alert
+          closable
+          message={controlDatabaseError}
+          onClose={() => setControlDatabaseError("")}
+          showIcon
+          style={{ marginBottom: 16 }}
+          type="warning"
+        />
+      ) : null}
+
       <Tabs
         activeKey={activeView}
-        items={tabs}
+        items={tabs.map((tab) => ({ ...tab, disabled: !activeSpaceId }))}
         onChange={(key) => onViewChange(key as typeof activeView)}
         type="card"
       />
 
-      <div className={styles.content}>{viewContent[activeView]()}</div>
+      <div className={styles.content}>
+        {spacesReady && !activeSpaceId ? (
+          <Card>
+            <Empty description={t("dataIngestion.spaces.emptyHint")} />
+          </Card>
+        ) : (
+          viewContent[activeView]()
+        )}
+      </div>
 
       <Drawer
         destroyOnClose
@@ -1976,6 +2130,13 @@ export function DataIngestionWorkbenchScene({
           </>
         ) : null}
       </Drawer>
+
+      <ControlDatabaseSwitchModal
+        onCancel={() => setControlDatabaseModalOpen(false)}
+        onConfigured={handleControlDatabaseInitialized}
+        open={controlDatabaseModalOpen}
+        status={controlDatabaseStatus}
+      />
 
       <Modal
         footer={[
@@ -2036,7 +2197,7 @@ export function DataIngestionWorkbenchScene({
                   database_url: event.target.value,
                 }))
               }
-              placeholder="mysql+pymysql://user:password@host:3306/data_marine?charset=utf8mb4"
+              placeholder={t("dataIngestion.spaces.databaseUrlPlaceholder")}
               value={spaceForm.database_url}
             />
           </Form.Item>
