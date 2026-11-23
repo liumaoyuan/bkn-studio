@@ -179,7 +179,11 @@ export function DataCatalogScene({ selection, suppressAutoSelect = false }: Data
       generation = catalogQueryGeneration.current,
       applyKeyword = false,
     ) => {
-      const [logicalCatalogResult, statsResult, ingestionCatalog] = await Promise.all([
+      // Resolve the ingestion fallback first: it may create and bind a real
+      // physical catalog, and the connector statistics must see that new catalog
+      // on the first load rather than requiring a page refresh.
+      const ingestionCatalog = await getIngestionCatalogRecord(keyword);
+      const [logicalCatalogResult, statsResult] = await Promise.all([
         listCatalogs({
           direction: "asc",
           keyword,
@@ -189,7 +193,6 @@ export function DataCatalogScene({ selection, suppressAutoSelect = false }: Data
           type: "logical",
         }),
         listCatalogConnectorTypeStats(keyword),
-        getIngestionCatalogRecord(keyword),
       ]);
       if (generation !== catalogQueryGeneration.current) {
         return false;

@@ -36,6 +36,7 @@ export const dataCatalogModuleManifest = {
     "data-ingestion/bootstrap",
     "data-ingestion/spaces",
     "data-ingestion/datasets",
+    "data-ingestion/runs",
   ],
   scenes: [
     {

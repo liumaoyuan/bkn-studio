@@ -27,6 +27,7 @@ export const dataIngestionModuleManifest = {
     "data-ingestion/sources",
     "data-ingestion/datasets",
     "data-ingestion/templates",
+    "data-ingestion/capabilities",
     "data-ingestion/uploads",
     "data-ingestion/runs",
     "data-ingestion/auto-scan",
@@ -38,7 +39,7 @@ export const dataIngestionModuleManifest = {
       exportName: "DataIngestionWorkbenchScene",
       description:
         "Multi-source file ingestion, staged processing, scheduled scans, catalog browsing, Agent, and MCP.",
-      inputs: ["activeView", "runId?", "onViewChange", "onOpenRun?", "onBack?"],
+      inputs: ["activeView", "onViewChange", "onOpenRun?"],
     },
   ],
 } as const;

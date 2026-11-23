@@ -9,7 +9,7 @@ The Data Ingestion module is the React and Ant Design interface for the Foundry
 - `/data-ingestion/import` — upload, inspect, execute, and verify ingestion
 - `/data-ingestion/pipelines` — pipeline templates and complete stage specifications
 - `/data-ingestion/sources` — source configuration
-- `/data-ingestion/runs` — run history and stage details
+- `/task-management?tab=data-ingestion` — unified ingestion task history and stage details
 - `/data-ingestion/catalog` — datasets and canonical records
 - `/data-ingestion/auto-scan` — scheduled discovery
 - `/data-ingestion/agent` — built-in Agent and MCP workbench

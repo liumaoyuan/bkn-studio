@@ -13,6 +13,11 @@ import type {
   ResourcePreviewQuery,
   ResourcePreviewResult,
 } from "@/modules/data-catalog/types/data-catalog";
+import {
+  catalogMatchesIngestionEndpoint,
+  parseIngestionDatabaseEndpoint,
+} from "@/modules/data-ingestion/services/ingestion-catalog-sync.service";
+import { dataIngestionService } from "@/modules/data-ingestion/services/data-ingestion.service";
 import { getCatalog, listCatalogs, type CatalogRecord } from "@/shared/catalog";
 
 export const DATA_INGESTION_CATALOG_ID = "data-ingestion";
@@ -62,55 +67,21 @@ type SpaceDataset = {
 };
 
 type IngestionCatalogBinding = {
+  databaseLabel: string;
   spaceId: string;
   spaceName: string;
   catalogId: string | null;
-};
-
-/** 数据空间的 database_label（mysql://host:port/db）解析成连接参数。 */
-const parseDatabaseLabel = (label: string) => {
-  const match = /^[a-z0-9+]+:\/\/([^:/]+):(\d+)\/(.+)$/i.exec(label.trim());
-  return match
-    ? { host: match[1].toLowerCase(), port: Number(match[2]), database: match[3].toLowerCase() }
-    : null;
-};
-
-const readConnectorConfigString = (config: Record<string, unknown> | undefined, key: string) => {
-  const value = config?.[key];
-  return typeof value === "string" ? value.trim().toLowerCase() : "";
-};
-
-const readConnectorConfigNumber = (config: Record<string, unknown> | undefined, key: string) => {
-  const value = config?.[key];
-  const parsed = typeof value === "number" ? value : typeof value === "string" ? Number(value) : 0;
-  return Number.isFinite(parsed) ? parsed : 0;
 };
 
 export const matchIngestionSpaceCatalog = (
   space: Pick<IngestionSpace, "name" | "database_label">,
   catalogs: CatalogRecord[],
 ) => {
-  const matched = catalogs.find((catalog) => catalogMatchesSpace(catalog, space));
-  return matched?.id ?? null;
-};
-
-const catalogMatchesSpace = (
-  catalog: CatalogRecord,
-  space: Pick<IngestionSpace, "name" | "database_label">,
-) => {
-  const parsed = parseDatabaseLabel(space.database_label ?? "");
-  const catalogDatabase = readConnectorConfigString(catalog.connectorConfig, "database");
-  if (!parsed) {
-    return catalog.name.trim().toLowerCase() === space.name.trim().toLowerCase();
-  }
-  const catalogHost = readConnectorConfigString(catalog.connectorConfig, "host");
-  const catalogPort = readConnectorConfigNumber(catalog.connectorConfig, "port");
-  const sameDatabase = Boolean(catalogDatabase) && catalogDatabase === parsed.database;
-  const sameHost = !catalogHost || catalogHost === parsed.host;
-  const samePort = !catalogPort || catalogPort === parsed.port;
-  return (
-    (sameDatabase && sameHost && samePort) || catalog.name.trim().toLowerCase() === parsed.database
+  const endpoint = parseIngestionDatabaseEndpoint(space.database_label ?? "");
+  const matched = catalogs.find((catalog) =>
+    catalogMatchesIngestionEndpoint(catalog, endpoint, space.name),
   );
+  return matched?.id ?? null;
 };
 
 /**
@@ -122,25 +93,44 @@ export async function listIngestionCatalogBindings(): Promise<IngestionCatalogBi
   if (spaces.length === 0) {
     return [];
   }
-  const summaries = await listCatalogs(
-    { direction: "asc", keyword: "", page: 1, pageSize: 200, type: "physical" },
-    { skipErrorToast: true },
-  )
-    .then((result) => result.items)
-    .catch(() => []);
-  // 列表接口不返回 connector_config，必须逐个拉详情才能按库名匹配数据空间。
-  const catalogs = await Promise.all(
-    summaries.map((summary) =>
-      getCatalog(summary.id, { skipErrorToast: true })
-        .then((detail) => detail ?? summary)
-        .catch(() => summary),
-    ),
-  );
-  return spaces.map((space) => ({
-    spaceId: space.id,
-    spaceName: space.name,
-    catalogId: matchIngestionSpaceCatalog(space, catalogs),
-  }));
+  const loadPhysicalCatalogs = async () => {
+    const summaries = await listCatalogs(
+      { direction: "asc", keyword: "", page: 1, pageSize: 200, type: "physical" },
+      { skipErrorToast: true },
+    )
+      .then((result) => result.items)
+      .catch(() => []);
+    // 列表接口不返回 connector_config，必须逐个拉详情才能按库名匹配数据空间。
+    return Promise.all(
+      summaries.map((summary) =>
+        getCatalog(summary.id, { skipErrorToast: true })
+          .then((detail) => detail ?? summary)
+          .catch(() => summary),
+      ),
+    );
+  };
+  const buildBindings = (catalogs: CatalogRecord[]) =>
+    spaces.map((space) => ({
+      databaseLabel: space.database_label ?? "",
+      spaceId: space.id,
+      spaceName: space.name,
+      catalogId: matchIngestionSpaceCatalog(space, catalogs),
+    }));
+
+  let bindings = buildBindings(await loadPhysicalCatalogs());
+  const unbound = bindings.filter((binding) => binding.catalogId === null);
+  if (unbound.length > 0) {
+    // Existing spaces created before catalog sync existed repair themselves once the
+    // current user has task-manage permission. Permission failures remain a fallback
+    // to the built-in ingestion view instead of breaking the data catalog.
+    const results = await Promise.allSettled(
+      unbound.map(async (binding) => dataIngestionService.syncDataSpaceCatalog(binding.spaceId)),
+    );
+    if (results.some((result) => result.status === "fulfilled")) {
+      bindings = buildBindings(await loadPhysicalCatalogs());
+    }
+  }
+  return bindings;
 }
 
 function scopedConfig(spaceId: string) {
@@ -221,10 +211,14 @@ function mapDataset(item: SpaceDataset, catalogId: string): CatalogResource {
 export async function getIngestionCatalogRecord(keyword = ""): Promise<CatalogRecord | null> {
   try {
     const bindings = await listIngestionCatalogBindings();
-    if (bindings.every((binding) => binding.catalogId !== null)) {
+    const unbound = bindings.find((binding) => binding.catalogId === null);
+    if (!unbound) {
       // 所有数据空间都已绑定到数据连接，不再显示临时目录。
       return null;
     }
+    const endpoint = parseIngestionDatabaseEndpoint(unbound.databaseLabel);
+    const connectorType = endpoint?.connectorType ?? "mysql";
+    const catalogName = endpoint?.databaseName ?? unbound.spaceName;
     const name = i18n.t("dataCatalog.ingestionCatalog.name");
     if (
       keyword.trim() &&
@@ -237,7 +231,7 @@ export async function getIngestionCatalogRecord(keyword = ""): Promise<CatalogRe
       builtin: true,
       category: "table",
       connectorConfig: {},
-      connectorType: "mariadb",
+      connectorType,
       createTime: "",
       creatorName: "",
       description: i18n.t("dataCatalog.ingestionCatalog.description"),
@@ -249,7 +243,7 @@ export async function getIngestionCatalogRecord(keyword = ""): Promise<CatalogRe
       lastCheckTime: "",
       metadata: {},
       mode: "local",
-      name,
+      name: catalogName || name,
       operations: ["view_detail"],
       schemas: [],
       status: "enabled",

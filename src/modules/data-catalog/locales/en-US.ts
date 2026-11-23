@@ -106,10 +106,13 @@ export const dataCatalogEnUS = {
       "Manage data-resource tasks, including viewing, pausing, restarting, and deleting tasks.",
     taskManagement: {
       tabs: {
+        dataIngestion: "Ingestion Runs",
         indexBuild: "Index Build Tasks",
         discover: "Discovery Tasks",
         semanticUnderstanding: "Semantic Understanding Tasks",
       },
+      ingestionRunsTitle: "Ingestion Runs ({{spaces}} data spaces)",
+      pipelineExecutionsTitle: "User Pipeline Executions",
       columns: {
         task: "Task ID",
         catalog: "Catalog",

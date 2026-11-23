@@ -8,6 +8,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  getIngestionCatalogRecord,
   getIngestionCatalogResources,
   listIngestionCatalogResources,
   matchIngestionSpaceCatalog,
@@ -49,7 +50,13 @@ describe("ingestion catalog adapter", () => {
       }
       if (url === "/data-ingestion/spaces") {
         return Promise.resolve({
-          data: [{ id: "default", name: "Default data space" }],
+          data: [
+            {
+              database_label: "mysql://db:3306/bkn",
+              id: "default",
+              name: "Default data space",
+            },
+          ],
         });
       }
       if (url === "/data-ingestion/datasets") {
@@ -91,6 +98,14 @@ describe("ingestion catalog adapter", () => {
       id: "data-ingestion:dataset:default:dataset-1",
       name: "Marine observations",
       rowCount: 12,
+    });
+  });
+
+  it("labels the unbound ingestion directory from the real database and connector", async () => {
+    await expect(getIngestionCatalogRecord()).resolves.toMatchObject({
+      connectorType: "mysql",
+      id: "data-ingestion",
+      name: "bkn",
     });
   });
 

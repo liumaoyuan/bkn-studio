@@ -98,10 +98,13 @@ export const dataCatalogZhCN = {
     indexBuildDescription: "管理数据资源相关任务，支持任务查看，暂停，重启，删除等操作。",
     taskManagement: {
       tabs: {
+        dataIngestion: "数据入库任务",
         indexBuild: "索引构建任务",
         discover: "探查任务",
         semanticUnderstanding: "语义理解任务",
       },
+      ingestionRunsTitle: "数据入库任务（{{spaces}} 个数据空间）",
+      pipelineExecutionsTitle: "用户管线执行记录",
       columns: {
         task: "任务 ID",
         catalog: "所属目录",

@@ -26,6 +26,7 @@ import {
   Empty,
   Input,
   List,
+  Modal,
   Popconfirm,
   Row,
   Space,
@@ -48,6 +49,7 @@ import type {
   DataIngestionAgentStatus,
 } from "@/modules/data-ingestion/types/data-ingestion";
 
+import { CustomMcpToolManager, CustomSkillManager } from "./CapabilityManager";
 import styles from "./IngestionAgentPanel.module.css";
 
 const { Paragraph, Text, Title } = Typography;
@@ -62,37 +64,113 @@ function safeText(value: unknown) {
   return JSON.stringify(value);
 }
 
-function McpToolList({ tools }: { tools: DataIngestionAgentManifest["tools"] }) {
+function McpToolList({
+  onDelete,
+  tools,
+}: {
+  onDelete?: (tool: DataIngestionAgentManifest["tools"][number]) => void;
+  tools: DataIngestionAgentManifest["tools"];
+}) {
   const { t } = useTranslation();
+  const [selected, setSelected] = useState<DataIngestionAgentManifest["tools"][number] | null>(
+    null,
+  );
 
   return (
-    <div className={styles.toolGrid}>
-      {tools.map((tool) => (
-        <Card className={styles.toolCard} key={tool.qualifiedName} size="small">
-          <div className={styles.toolHeader}>
-            <div>
-              <div className={styles.toolName}>{tool.display_name || tool.name}</div>
+    <>
+      <div className={styles.toolGrid}>
+        {tools.map((tool) => (
+          <Card
+            className={styles.toolCard}
+            hoverable
+            key={tool.qualifiedName || tool.name}
+            onClick={() => setSelected(tool)}
+            size="small"
+          >
+            <div className={styles.toolHeader}>
+              <div>
+                <div className={styles.toolName}>{tool.display_name || tool.name}</div>
+              </div>
+              <Space size={4}>
+                {tool.built_in ? <Tag color="gold">{t("dataIngestion.agent.builtIn")}</Tag> : null}
+                <Tag color={tool.read_only ? "blue" : "orange"}>
+                  {t(
+                    tool.read_only
+                      ? "dataIngestion.agent.readOnly"
+                      : "dataIngestion.agent.requiresApproval",
+                  )}
+                </Tag>
+              </Space>
             </div>
-            <Tag color={tool.read_only ? "blue" : "orange"}>
-              {t(
-                tool.read_only
-                  ? "dataIngestion.agent.readOnly"
-                  : "dataIngestion.agent.requiresApproval",
+            <Paragraph className={styles.toolDescription}>{tool.description}</Paragraph>
+            <div className={styles.toolMeta}>
+              <Text className={styles.technicalLabel} type="secondary">
+                {t("dataIngestion.agent.technicalName")}
+              </Text>
+              <Text className={styles.toolCode} code>
+                {tool.qualifiedName || tool.name}
+              </Text>
+            </div>
+          </Card>
+        ))}
+      </div>
+      <Modal
+        footer={
+          selected && !selected.built_in && onDelete ? (
+            <Popconfirm
+              onConfirm={() => {
+                onDelete(selected);
+                setSelected(null);
+              }}
+              title={t("dataIngestion.agent.deleteConfirm")}
+            >
+              <Button danger>{t("dataIngestion.actions.delete")}</Button>
+            </Popconfirm>
+          ) : null
+        }
+        onCancel={() => setSelected(null)}
+        open={Boolean(selected)}
+        title={selected?.display_name || selected?.name}
+      >
+        {selected ? (
+          <Descriptions bordered column={1} size="small">
+            <Descriptions.Item label={t("dataIngestion.agent.description")}>
+              {selected.description || "-"}
+            </Descriptions.Item>
+            <Descriptions.Item label={t("dataIngestion.agent.technicalName")}>
+              <Text code>{selected.qualifiedName || selected.name}</Text>
+            </Descriptions.Item>
+            <Descriptions.Item label={t("dataIngestion.agent.arguments")}>
+              {selected.arguments?.length ? (
+                <Space direction="vertical" size={2}>
+                  {selected.arguments.map((argument) => (
+                    <Text key={argument.name}>
+                      <Text code>{argument.name}</Text> · {argument.type}
+                      {argument.required ? ` · ${t("dataIngestion.agent.required")}` : ""}
+                    </Text>
+                  ))}
+                </Space>
+              ) : (
+                "-"
               )}
-            </Tag>
-          </div>
-          <Paragraph className={styles.toolDescription}>{tool.description}</Paragraph>
-          <div className={styles.toolMeta}>
-            <Text className={styles.technicalLabel} type="secondary">
-              {t("dataIngestion.agent.technicalName")}
-            </Text>
-            <Text className={styles.toolCode} code>
-              {tool.qualifiedName}
-            </Text>
-          </div>
-        </Card>
-      ))}
-    </div>
+            </Descriptions.Item>
+            <Descriptions.Item label={t("dataIngestion.agent.returns")}>
+              {selected.returns || "-"}
+            </Descriptions.Item>
+            <Descriptions.Item label={t("dataIngestion.agent.lockState")}>
+              {selected.locked
+                ? t("dataIngestion.agent.builtInLocked")
+                : t("dataIngestion.agent.userEditable")}
+            </Descriptions.Item>
+            {selected.config ? (
+              <Descriptions.Item label={t("dataIngestion.agent.configuration")}>
+                <pre className={styles.codePanel}>{JSON.stringify(selected.config, null, 2)}</pre>
+              </Descriptions.Item>
+            ) : null}
+          </Descriptions>
+        ) : null}
+      </Modal>
+    </>
   );
 }
 
@@ -242,6 +320,16 @@ export function IngestionAgentPanel() {
           await loadSession(nextSessions[0].id);
         }
       }
+    } catch (error) {
+      message.error(extractRequestErrorMessage(error));
+    }
+  }
+
+  async function deleteCustomTool(tool: DataIngestionAgentManifest["tools"][number]) {
+    try {
+      await dataIngestionService.deleteCustomMcpTool(tool.id || tool.name);
+      message.success(t("dataIngestion.agent.capabilityDeleted"));
+      await load();
     } catch (error) {
       message.error(extractRequestErrorMessage(error));
     }
@@ -593,21 +681,39 @@ export function IngestionAgentPanel() {
             {
               key: "tools",
               label: t("dataIngestion.agent.tools"),
-              children: <McpToolList tools={manifest?.tools ?? []} />,
+              children: (
+                <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                  <CustomMcpToolManager onChanged={load} tools={manifest?.tools ?? []} />
+                  <McpToolList
+                    onDelete={(tool) => void deleteCustomTool(tool)}
+                    tools={manifest?.tools ?? []}
+                  />
+                </Space>
+              ),
             },
             {
               key: "skill",
               label: t("dataIngestion.agent.skillView"),
               children: (
-                <>
-                  <Button
-                    icon={<CopyOutlined />}
-                    onClick={() => void copyText(skill?.content || "")}
+                <Space direction="vertical" size={16} style={{ width: "100%" }}>
+                  <Card
+                    extra={
+                      <Space>
+                        <Tag color="gold">{t("dataIngestion.agent.builtInLocked")}</Tag>
+                        <Button
+                          icon={<CopyOutlined />}
+                          onClick={() => void copyText(skill?.content || "")}
+                        >
+                          {t("dataIngestion.agent.copy")}
+                        </Button>
+                      </Space>
+                    }
+                    title={t("dataIngestion.agent.builtInSkill")}
                   >
-                    {t("dataIngestion.agent.copy")}
-                  </Button>
-                  <pre className={styles.codePanel}>{skill?.content || "-"}</pre>
-                </>
+                    <pre className={styles.codePanel}>{skill?.content || "-"}</pre>
+                  </Card>
+                  <CustomSkillManager onChanged={load} skills={skill?.custom ?? []} />
+                </Space>
               ),
             },
             {

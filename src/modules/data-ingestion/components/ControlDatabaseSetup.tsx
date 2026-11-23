@@ -126,7 +126,32 @@ export function ControlDatabaseSetup({
     setInitializing(true);
     setOperationError("");
     try {
-      const nextStatus = await dataIngestionService.configureControlDatabase(await readForm());
+      const values = await form.validateFields();
+      const request = {
+        database_url: buildMysqlConnectionUrl({
+          databaseName: values.database_name,
+          host: values.host,
+          password: values.password || "",
+          port: values.port,
+          username: values.username,
+        }),
+        create_database: values.create_database,
+        bootstrap_database_url: values.bootstrap_database_url?.trim() || undefined,
+      };
+      const nextStatus = await dataIngestionService.configureControlDatabase(request);
+      try {
+        const spaces = await dataIngestionService.listDataSpaces();
+        const defaultSpace = spaces.find((space) => space.is_default) ?? spaces[0];
+        if (defaultSpace) {
+          await dataIngestionService.syncDataSpaceCatalog(defaultSpace.id);
+        }
+      } catch (error) {
+        message.warning(
+          t("dataIngestion.controlDatabase.catalogSyncWarning", {
+            message: extractRequestErrorMessage(error),
+          }),
+        );
+      }
       message.success(t("dataIngestion.controlDatabase.initialized"));
       await onInitialized(nextStatus);
     } catch (error) {

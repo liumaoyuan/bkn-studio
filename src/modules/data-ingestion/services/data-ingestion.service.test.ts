@@ -80,6 +80,40 @@ describe("data-ingestion service", () => {
     expect(body.get("template_code")).toBe("tabular_standard");
   });
 
+  it("updates an existing data source in the selected space", async () => {
+    await dataIngestionService.updateSource("source-1", {
+      name: "Edited source",
+      source_type: "api",
+      config: { url: "https://api.example.test/data" },
+    });
+
+    expect(http.put).toHaveBeenCalledWith(
+      "/data-ingestion/sources/source-1",
+      {
+        name: "Edited source",
+        source_type: "api",
+        config: { url: "https://api.example.test/data" },
+      },
+      {
+        headers: { "x-data-ingestion-space": "default" },
+      },
+    );
+  });
+
+  it("lists and deletes persisted user pipeline executions", async () => {
+    await dataIngestionService.listPipelineExecutions();
+    await dataIngestionService.deletePipelineExecution("execution-1");
+
+    expect(http.get).toHaveBeenCalledWith("/data-ingestion/capabilities/pipeline-executions", {
+      headers: { "x-data-ingestion-space": "default" },
+      params: { limit: 200 },
+    });
+    expect(http.delete).toHaveBeenCalledWith(
+      "/data-ingestion/capabilities/pipeline-executions/execution-1",
+      { headers: { "x-data-ingestion-space": "default" } },
+    );
+  });
+
   it("reads the Agent status from the platform model integration", async () => {
     await dataIngestionService.getAgentStatus();
 

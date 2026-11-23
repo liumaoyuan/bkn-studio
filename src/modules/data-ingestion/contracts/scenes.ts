@@ -9,8 +9,7 @@ import type { DataIngestionView } from "@/modules/data-ingestion/types/data-inge
 
 export interface DataIngestionWorkbenchSceneProps {
   activeView: DataIngestionView;
-  runId?: string;
   onViewChange: (view: DataIngestionView) => void;
   onOpenRun?: (runId: string) => void;
-  onBack?: () => void;
+  onOpenCatalogResource?: (resourceId: string, tab?: "detail" | "index" | "preview") => void;
 }

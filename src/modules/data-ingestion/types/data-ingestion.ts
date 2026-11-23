@@ -6,7 +6,7 @@
  */
 
 export type DataIngestionView =
-  "overview" | "import" | "pipelines" | "sources" | "runs" | "catalog" | "auto-scan" | "agent";
+  "overview" | "import" | "pipelines" | "sources" | "catalog" | "auto-scan" | "agent";
 
 export type JsonObject = Record<string, unknown>;
 
@@ -60,6 +60,10 @@ export interface DataIngestionDataset {
   description: string;
   data_type: string;
   target_table: string;
+  storage_mode?: "auto" | "shared" | "dedicated";
+  upsert_keys?: string[];
+  physical_table?: string;
+  partition_mode?: string;
   record_count: number;
   last_ingested_at: string | null;
   created_at: string;
@@ -97,8 +101,70 @@ export interface DataIngestionPipelineTemplate {
     parameters: JsonObject;
     artifact: string;
     retryable: boolean;
+    tool_name?: string;
   }>;
   enabled: boolean;
+}
+
+export interface DataIngestionPipelineRunResult {
+  execution_id?: string;
+  pipeline_code: string;
+  status: string;
+  results: Array<{
+    step: number;
+    key: string;
+    tool_name: string;
+    arguments?: JsonObject;
+    result: unknown;
+  }>;
+}
+
+export interface DataIngestionPipelineExecution {
+  id: string;
+  pipeline_code: string;
+  pipeline_name: string;
+  space_id: string;
+  status: string;
+  inputs: JsonObject;
+  step_inputs: JsonObject;
+  results: Array<{
+    step: number;
+    key: string;
+    tool_name: string;
+    arguments?: JsonObject;
+    result: unknown;
+  }>;
+  error_message: string;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string;
+}
+
+export interface DataIngestionCustomMcpTool {
+  id: string;
+  name: string;
+  display_name: string;
+  description: string;
+  read_only: boolean;
+  requires_approval: boolean;
+  tool_type: string;
+  config: JsonObject;
+  enabled: boolean;
+  built_in: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DataIngestionCustomSkill {
+  id: string;
+  name: string;
+  display_name: string;
+  description: string;
+  content: string;
+  enabled: boolean;
+  built_in: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface DataIngestionRun {
@@ -114,6 +180,7 @@ export interface DataIngestionRun {
   fingerprint: string;
   fetched_count: number;
   inserted_count: number;
+  updated_count: number;
   duplicate_count: number;
   error_count: number;
   error_message: string;
@@ -132,6 +199,7 @@ export interface DataIngestionDatasetRecord {
   id: string;
   dataset_id: string;
   run_id: string;
+  record_key?: string;
   data_type: string;
   payload: JsonObject;
   asset_path: string;
@@ -237,12 +305,22 @@ export interface DataIngestionAgentManifest {
   permissions: JsonObject;
   workflow: string[];
   tools: Array<{
+    arguments?: Array<{
+      name: string;
+      type: string;
+      required?: boolean;
+    }>;
+    built_in?: boolean;
+    config?: JsonObject;
+    id?: string;
     name: string;
     display_name: string;
     description: string;
+    locked?: boolean;
     read_only: boolean;
     requires_approval: boolean;
-    qualifiedName: string;
+    qualifiedName?: string;
+    returns?: string;
   }>;
 }
 
@@ -251,6 +329,9 @@ export interface DataIngestionAgentSkill {
   path: string;
   content: string;
   loaded: boolean;
+  built_in?: boolean;
+  locked?: boolean;
+  custom?: DataIngestionCustomSkill[];
 }
 
 export interface DataIngestionAgentSession {

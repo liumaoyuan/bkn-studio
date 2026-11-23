@@ -57,6 +57,10 @@ import { ControlDatabaseSetup } from "@/modules/data-ingestion/components/Contro
 import { ControlDatabaseSwitchModal } from "@/modules/data-ingestion/components/ControlDatabaseSwitchModal";
 import { DatabaseConnectionPicker } from "@/modules/data-ingestion/components/DatabaseConnectionPicker";
 import { IngestionAgentPanel } from "@/modules/data-ingestion/components/IngestionAgentPanel";
+import {
+  PipelineComposerModal,
+  PipelineRunModal,
+} from "@/modules/data-ingestion/components/PipelineComposer";
 import type { DataIngestionWorkbenchSceneProps } from "@/modules/data-ingestion/contracts/scenes";
 import {
   buildMysqlConnectionUrl,
@@ -70,12 +74,14 @@ import {
 } from "@/modules/data-ingestion/services/data-ingestion.service";
 import type {
   DataIngestionAutoScanJob,
+  DataIngestionAgentManifest,
   DataIngestionControlDatabaseStatus,
   DataIngestionDataSource,
   DataIngestionDataset,
   DataIngestionDatasetRecord,
   DataIngestionInspection,
   DataIngestionOverview,
+  DataIngestionPipelineRunResult,
   DataIngestionPipelineTemplate,
   DataIngestionRun,
   DataIngestionRunListItem,
@@ -388,10 +394,9 @@ function RunDetailCard({
 
 export function DataIngestionWorkbenchScene({
   activeView,
-  runId,
   onViewChange,
   onOpenRun,
-  onBack,
+  onOpenCatalogResource,
 }: DataIngestionWorkbenchSceneProps) {
   const { t } = useTranslation();
   const { message } = useAppServices();
@@ -408,9 +413,6 @@ export function DataIngestionWorkbenchScene({
   const [sources, setSources] = useState<DataIngestionDataSource[]>([]);
   const [datasets, setDatasets] = useState<DataIngestionDataset[]>([]);
   const [templates, setTemplates] = useState<DataIngestionPipelineTemplate[]>([]);
-  const [runs, setRuns] = useState<DataIngestionRunListItem[]>([]);
-  const [runSearch, setRunSearch] = useState("");
-  const [runStatus, setRunStatus] = useState("");
   const [scanJobs, setScanJobs] = useState<DataIngestionAutoScanJob[]>([]);
   const [controlDatabaseStatus, setControlDatabaseStatus] =
     useState<DataIngestionControlDatabaseStatus | null>(null);
@@ -427,24 +429,39 @@ export function DataIngestionWorkbenchScene({
   const [refreshing, setRefreshing] = useState(false);
 
   const [sourceModalOpen, setSourceModalOpen] = useState(false);
+  const [editingSourceId, setEditingSourceId] = useState<string | null>(null);
   const [sourceForm, setSourceForm] = useState({
+    body: "{}",
+    headers: "{}",
     name: "",
     source_type: "upload",
+    method: "GET",
+    pagination_type: "none",
+    page_param: "page",
+    page_size: "100",
+    max_pages: "10",
+    next_url_path: "",
     host: "",
     port: "",
     path: "",
     username: "",
     password: "",
     database: "",
+    private_key: "",
     query: "",
+    record_path: "",
+    use_tls: false,
     watermark_column: "",
   });
 
   const [datasetModalOpen, setDatasetModalOpen] = useState(false);
+  const [editingDatasetId, setEditingDatasetId] = useState<string | null>(null);
   const [datasetForm, setDatasetForm] = useState({
     name: "",
     description: "",
     data_type: "tabular",
+    storage_mode: "auto" as "auto" | "shared" | "dedicated",
+    upsert_keys: "",
   });
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -461,11 +478,28 @@ export function DataIngestionWorkbenchScene({
   const [inspecting, setInspecting] = useState(false);
   const [ingesting, setIngesting] = useState(false);
   const [createdRun, setCreatedRun] = useState<DataIngestionRun | null>(null);
-  const [routeRun, setRouteRun] = useState<DataIngestionRun | null>(null);
   const [runDetailOpen, setRunDetailOpen] = useState(false);
   const [drawerRun, setDrawerRun] = useState<DataIngestionRun | null>(null);
   const [pipelineDrawer, setPipelineDrawer] = useState<DataIngestionPipelineTemplate | null>(null);
+  const [pipelineModalOpen, setPipelineModalOpen] = useState(false);
+  const [editingPipeline, setEditingPipeline] = useState<DataIngestionPipelineTemplate | null>(
+    null,
+  );
+  const [creatingPipeline, setCreatingPipeline] = useState(false);
+  const [runPipelineTarget, setRunPipelineTarget] = useState<DataIngestionPipelineTemplate | null>(
+    null,
+  );
+  const [runningPipeline, setRunningPipeline] = useState(false);
+  const [pipelineRunResult, setPipelineRunResult] = useState<DataIngestionPipelineRunResult | null>(
+    null,
+  );
+  const [agentManifest, setAgentManifest] = useState<DataIngestionAgentManifest | null>(null);
   const pollerRef = useRef<number | null>(null);
+  const pollerInFlightRef = useRef(false);
+  const pollerErrorNotifiedRef = useRef(false);
+  const overviewPollInFlightRef = useRef(false);
+  const drawerPollInFlightRef = useRef(false);
+  const scanJobsPollInFlightRef = useRef(false);
 
   const [selectedCatalogDatasetId, setSelectedCatalogDatasetId] = useState("");
   const [datasetSearch, setDatasetSearch] = useState("");
@@ -498,20 +532,8 @@ export function DataIngestionWorkbenchScene({
     (dataset) => dataset.id === selectedCatalogDatasetId,
   );
   const activeSpace = spaces.find((space) => space.id === activeSpaceId);
-  const activeRun = routeRun ?? createdRun;
-  const visibleRuns = useMemo(() => {
-    const keyword = runSearch.trim().toLowerCase();
-    return runs.filter((run) => {
-      if (runStatus && run.status !== runStatus) {
-        return false;
-      }
-      if (!keyword) {
-        return true;
-      }
-      const datasetName = datasets.find((dataset) => dataset.id === run.dataset_id)?.name || "";
-      return [run.id, run.original_name, datasetName].join(" ").toLowerCase().includes(keyword);
-    });
-  }, [datasets, runSearch, runStatus, runs]);
+  const activeRun = createdRun;
+  const hasActiveScanJobs = scanJobs.some((job) => ["queued", "running"].includes(job.status));
   const visibleDatasets = useMemo(() => {
     const keyword = datasetSearch.trim().toLowerCase();
     if (!keyword) {
@@ -533,26 +555,30 @@ export function DataIngestionWorkbenchScene({
         setRefreshing(true);
       }
       try {
-        const [nextOverview, nextStorage, nextSources, nextDatasets, nextTemplates, nextRuns] =
+        const [nextOverview, nextStorage, nextSources, nextDatasets, nextTemplates, nextManifest] =
           await Promise.all([
             dataIngestionService.overview(),
             dataIngestionService.getStorageInfo(),
             dataIngestionService.listSources(),
             dataIngestionService.listDatasets(),
             dataIngestionService.listTemplates(),
-            dataIngestionService.listRuns(),
+            dataIngestionService.getAgentManifest(),
           ]);
         setOverview(nextOverview);
         setStorageInfo(nextStorage);
         setSources(nextSources);
         setDatasets(nextDatasets);
         setTemplates(nextTemplates);
-        setRuns(nextRuns);
+        setAgentManifest(nextManifest);
         setSelectedDatasetId((current) => current || nextDatasets[0]?.id || "");
         setSelectedCatalogDatasetId((current) => current || nextDatasets[0]?.id || "");
         setSelectedSourceId(
           (current) =>
-            current || nextSources.find((source) => source.source_type === "upload")?.id || "",
+            (nextSources.some((source) => source.id === current && source.source_type === "upload")
+              ? current
+              : "") ||
+            nextSources.find((source) => source.source_type === "upload")?.id ||
+            "",
         );
       } catch (error) {
         message.error(
@@ -568,22 +594,33 @@ export function DataIngestionWorkbenchScene({
     [activeSpaceId, message, t],
   );
 
-  const loadScanJobs = useCallback(async () => {
-    if (!activeSpaceId) {
-      setScanJobs([]);
-      return;
-    }
-    try {
-      const next = await dataIngestionService.listScanJobs();
-      setScanJobs(next);
-    } catch (error) {
-      message.error(
-        t("dataIngestion.errors.load", {
-          message: extractRequestErrorMessage(error),
-        }),
-      );
-    }
-  }, [activeSpaceId, message, t]);
+  const loadScanJobs = useCallback(
+    async (silent = false) => {
+      if (!activeSpaceId) {
+        setScanJobs([]);
+        return;
+      }
+      if (scanJobsPollInFlightRef.current) {
+        return;
+      }
+      scanJobsPollInFlightRef.current = true;
+      try {
+        const next = await dataIngestionService.listScanJobs();
+        setScanJobs(next);
+      } catch (error) {
+        if (!silent) {
+          message.error(
+            t("dataIngestion.errors.load", {
+              message: extractRequestErrorMessage(error),
+            }),
+          );
+        }
+      } finally {
+        scanJobsPollInFlightRef.current = false;
+      }
+    },
+    [activeSpaceId, message, t],
+  );
 
   const loadRecords = useCallback(
     async (datasetId = selectedCatalogDatasetId, page = recordsPage) => {
@@ -684,36 +721,20 @@ export function DataIngestionWorkbenchScene({
   }, [activeSpaceId, activeView, loadScanJobs, spacesReady]);
 
   useEffect(() => {
+    if (activeView !== "auto-scan" || !hasActiveScanJobs) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      void loadScanJobs(true);
+    }, 2_000);
+    return () => window.clearInterval(timer);
+  }, [activeView, hasActiveScanJobs, loadScanJobs]);
+
+  useEffect(() => {
     if (spacesReady && activeSpaceId && activeView === "catalog") {
       void loadRecords(selectedCatalogDatasetId, 1);
     }
   }, [activeSpaceId, activeView, loadRecords, selectedCatalogDatasetId, spacesReady]);
-
-  useEffect(() => {
-    if (!spacesReady || !activeSpaceId) {
-      return;
-    }
-    if (!runId) {
-      setRouteRun(null);
-      return;
-    }
-    let cancelled = false;
-    void dataIngestionService
-      .getRun(runId)
-      .then((run) => {
-        if (!cancelled) {
-          setRouteRun(run);
-        }
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          message.error(extractRequestErrorMessage(error));
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [activeSpaceId, message, runId, spacesReady]);
 
   useEffect(
     () => () => {
@@ -724,37 +745,133 @@ export function DataIngestionWorkbenchScene({
     [],
   );
 
+  useEffect(() => {
+    if (activeView !== "overview" || !overview?.active_runs) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      if (overviewPollInFlightRef.current) {
+        return;
+      }
+      overviewPollInFlightRef.current = true;
+      void dataIngestionService
+        .overview()
+        .then(setOverview)
+        .catch(() => {
+          // Background refresh failures are retried on the next interval.
+        })
+        .finally(() => {
+          overviewPollInFlightRef.current = false;
+        });
+    }, 2_000);
+    return () => window.clearInterval(timer);
+  }, [activeView, overview?.active_runs]);
+
+  useEffect(() => {
+    if (!runDetailOpen || !drawerRun || !["queued", "running"].includes(drawerRun.status)) {
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setInterval(() => {
+      if (drawerPollInFlightRef.current) {
+        return;
+      }
+      drawerPollInFlightRef.current = true;
+      void dataIngestionService
+        .getRun(drawerRun.id)
+        .then((next) => {
+          if (!cancelled) {
+            setDrawerRun(next);
+          }
+        })
+        .catch(() => {
+          // Keep the last visible snapshot while the service is retried.
+        })
+        .finally(() => {
+          drawerPollInFlightRef.current = false;
+        });
+    }, 2_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [drawerRun, runDetailOpen]);
+
   async function saveSource() {
     if (!sourceForm.name.trim()) {
       return;
     }
     try {
-      await dataIngestionService.createSource({
+      let headers: Record<string, string> = {};
+      let body: Record<string, unknown> = {};
+      if (sourceForm.source_type === "api") {
+        try {
+          headers = JSON.parse(sourceForm.headers || "{}") as Record<string, string>;
+          body = sourceForm.body.trim()
+            ? (JSON.parse(sourceForm.body) as Record<string, unknown>)
+            : {};
+        } catch {
+          message.error(t("dataIngestion.sources.invalidJson"));
+          return;
+        }
+      }
+      const payload = {
         name: sourceForm.name.trim(),
         source_type: sourceForm.source_type,
         config: {
+          body: sourceForm.source_type === "api" ? body : undefined,
+          headers: sourceForm.source_type === "api" ? headers : undefined,
           host: sourceForm.source_type === "api" ? undefined : sourceForm.host || undefined,
+          method: sourceForm.source_type === "api" ? sourceForm.method : undefined,
+          pagination_type:
+            sourceForm.source_type === "api" ? sourceForm.pagination_type : undefined,
+          page_param: sourceForm.source_type === "api" ? sourceForm.page_param : undefined,
+          page_size: sourceForm.source_type === "api" ? Number(sourceForm.page_size) : undefined,
+          max_pages: sourceForm.source_type === "api" ? Number(sourceForm.max_pages) : undefined,
+          next_url_path:
+            sourceForm.source_type === "api" ? sourceForm.next_url_path || undefined : undefined,
           url: sourceForm.source_type === "api" ? sourceForm.host || undefined : undefined,
           port: sourceForm.port || undefined,
           path: sourceForm.path || undefined,
           username: sourceForm.username || undefined,
           password: sourceForm.password || undefined,
           database: sourceForm.database || undefined,
+          private_key: sourceForm.private_key || undefined,
           query: sourceForm.query || undefined,
+          record_path:
+            sourceForm.source_type === "api" ? sourceForm.record_path || undefined : undefined,
+          use_tls: sourceForm.source_type === "ftp" ? sourceForm.use_tls : undefined,
           watermark_column: sourceForm.watermark_column || undefined,
         },
-      });
+      };
+      if (editingSourceId) {
+        await dataIngestionService.updateSource(editingSourceId, payload);
+      } else {
+        await dataIngestionService.createSource(payload);
+      }
       setSourceModalOpen(false);
+      setEditingSourceId(null);
       setSourceForm({
+        body: "{}",
+        headers: "{}",
         name: "",
         source_type: "upload",
+        method: "GET",
+        pagination_type: "none",
+        page_param: "page",
+        page_size: "100",
+        max_pages: "10",
+        next_url_path: "",
         host: "",
         port: "",
         path: "",
         username: "",
         password: "",
         database: "",
+        private_key: "",
         query: "",
+        record_path: "",
+        use_tls: false,
         watermark_column: "",
       });
       message.success(t("dataIngestion.sources.saved"));
@@ -777,7 +894,6 @@ export function DataIngestionWorkbenchScene({
     setSources([]);
     setDatasets([]);
     setTemplates([]);
-    setRuns([]);
     setScanJobs([]);
     setRecords([]);
     setRecordsTotal(0);
@@ -785,24 +901,33 @@ export function DataIngestionWorkbenchScene({
     setSelectedCatalogDatasetId("");
     setSelectedSourceId("");
     setCreatedRun(null);
-    setRouteRun(null);
     setDrawerRun(null);
   }
 
   async function saveDataSpace(values: DataSpaceFormValues) {
     setCreatingSpace(true);
     try {
+      const databaseUrl = buildMysqlConnectionUrl({
+        databaseName: values.database_name,
+        host: values.host,
+        password: values.password || "",
+        port: values.port,
+        username: values.username,
+      });
       const created = await dataIngestionService.createDataSpace({
         name: values.name.trim(),
         slug: createDataSpaceSlug(values.name, values.database_name),
-        database_url: buildMysqlConnectionUrl({
-          databaseName: values.database_name,
-          host: values.host,
-          password: values.password || "",
-          port: values.port,
-          username: values.username,
-        }),
+        database_url: databaseUrl,
       });
+      try {
+        await dataIngestionService.syncDataSpaceCatalog(created.id);
+      } catch (error) {
+        message.warning(
+          t("dataIngestion.spaces.catalogSyncWarning", {
+            message: extractRequestErrorMessage(error),
+          }),
+        );
+      }
       setSpaces((current) => [...current, created]);
       spaceForm.resetFields();
       setSpaceModalOpen(false);
@@ -830,7 +955,6 @@ export function DataIngestionWorkbenchScene({
     setSources([]);
     setDatasets([]);
     setTemplates([]);
-    setRuns([]);
     setScanJobs([]);
     setRecords([]);
     setRecordsTotal(0);
@@ -838,7 +962,6 @@ export function DataIngestionWorkbenchScene({
     setSelectedCatalogDatasetId("");
     setSelectedSourceId("");
     setCreatedRun(null);
-    setRouteRun(null);
     setDrawerRun(null);
     try {
       await loadDataSpaces();
@@ -861,21 +984,83 @@ export function DataIngestionWorkbenchScene({
     }
   }
 
+  function openSourceEditor(source: DataIngestionDataSource) {
+    const config = source.config;
+    setEditingSourceId(source.id);
+    setSourceForm({
+      body: JSON.stringify(config.body ?? {}, null, 2),
+      headers: JSON.stringify(config.headers ?? {}, null, 2),
+      name: source.name,
+      source_type: source.source_type,
+      method: typeof config.method === "string" ? config.method : "GET",
+      pagination_type: typeof config.pagination_type === "string" ? config.pagination_type : "none",
+      page_param: typeof config.page_param === "string" ? config.page_param : "page",
+      page_size:
+        config.page_size === undefined || config.page_size === null
+          ? "100"
+          : String(config.page_size),
+      max_pages:
+        config.max_pages === undefined || config.max_pages === null
+          ? "10"
+          : String(config.max_pages),
+      next_url_path: typeof config.next_url_path === "string" ? config.next_url_path : "",
+      host:
+        source.source_type === "api"
+          ? typeof config.url === "string"
+            ? config.url
+            : ""
+          : typeof config.host === "string"
+            ? config.host
+            : "",
+      port: config.port === undefined || config.port === null ? "" : String(config.port),
+      path: typeof config.path === "string" ? config.path : "",
+      username: typeof config.username === "string" ? config.username : "",
+      password: "",
+      database: typeof config.database === "string" ? config.database : "",
+      private_key: "",
+      query: typeof config.query === "string" ? config.query : "",
+      record_path: typeof config.record_path === "string" ? config.record_path : "",
+      use_tls: config.use_tls === true,
+      watermark_column: typeof config.watermark_column === "string" ? config.watermark_column : "",
+    });
+    setSourceModalOpen(true);
+  }
+
   async function saveDataset() {
     if (!datasetForm.name.trim()) {
       return;
     }
     try {
-      const dataset = await dataIngestionService.createDataset({
+      const wasEditing = Boolean(editingDatasetId);
+      const payload = {
         name: datasetForm.name.trim(),
         description: datasetForm.description.trim(),
         data_type: datasetForm.data_type,
-      });
+        upsert_keys: datasetForm.upsert_keys
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean),
+      };
+      const dataset = editingDatasetId
+        ? await dataIngestionService.updateDataset(editingDatasetId, payload)
+        : await dataIngestionService.createDataset({
+            ...payload,
+            storage_mode: datasetForm.storage_mode,
+          });
       setDatasetModalOpen(false);
-      setDatasetForm({ name: "", description: "", data_type: "tabular" });
+      setEditingDatasetId(null);
+      setDatasetForm({
+        name: "",
+        description: "",
+        data_type: "tabular",
+        storage_mode: "auto",
+        upsert_keys: "",
+      });
       setSelectedDatasetId(dataset.id);
       setSelectedCatalogDatasetId(dataset.id);
-      message.success(t("dataIngestion.catalog.created"));
+      message.success(
+        t(wasEditing ? "dataIngestion.catalog.updated" : "dataIngestion.catalog.created"),
+      );
       await loadCore(true);
     } catch (error) {
       message.error(
@@ -942,24 +1127,61 @@ export function DataIngestionWorkbenchScene({
       if (pollerRef.current) {
         window.clearInterval(pollerRef.current);
       }
+      pollerInFlightRef.current = false;
+      pollerErrorNotifiedRef.current = false;
       pollerRef.current = window.setInterval(() => {
+        if (pollerInFlightRef.current) {
+          return;
+        }
+        pollerInFlightRef.current = true;
         void (async () => {
           try {
             const next = await dataIngestionService.getRun(run.id);
+            pollerErrorNotifiedRef.current = false;
             setCreatedRun(next);
+            setOverview((current) =>
+              current
+                ? {
+                    ...current,
+                    recent_runs: current.recent_runs.map((item) =>
+                      item.id === next.id ? next : item,
+                    ),
+                  }
+                : current,
+            );
+            setDrawerRun((current) => (current?.id === next.id ? next : current));
             if (!["queued", "running"].includes(next.status)) {
               if (pollerRef.current) {
                 window.clearInterval(pollerRef.current);
                 pollerRef.current = null;
               }
-              message.success(t("dataIngestion.import.inserted", { count: next.inserted_count }));
+              if (next.status === "success") {
+                message.success(
+                  t("dataIngestion.import.saved", {
+                    duplicates: next.duplicate_count,
+                    inserted: next.inserted_count,
+                    updated: next.updated_count,
+                  }),
+                );
+                if (activeSpaceId) {
+                  void dataIngestionService.syncDataSpaceCatalog(activeSpaceId);
+                }
+              } else {
+                message.error(
+                  t("dataIngestion.import.failedDetail", {
+                    message: next.error_message || t("dataIngestion.import.failed"),
+                  }),
+                );
+              }
               await loadCore(true);
             }
-          } catch {
-            if (pollerRef.current) {
-              window.clearInterval(pollerRef.current);
-              pollerRef.current = null;
+          } catch (error) {
+            if (!pollerErrorNotifiedRef.current) {
+              pollerErrorNotifiedRef.current = true;
+              message.error(extractRequestErrorMessage(error));
             }
+          } finally {
+            pollerInFlightRef.current = false;
           }
         })();
       }, 1000);
@@ -983,7 +1205,6 @@ export function DataIngestionWorkbenchScene({
   async function retryRun(runToRetry: DataIngestionRun) {
     try {
       const next = await dataIngestionService.retryRun(runToRetry.id);
-      setRouteRun(next);
       if (onOpenRun) {
         onOpenRun(next.id);
       }
@@ -1044,6 +1265,137 @@ export function DataIngestionWorkbenchScene({
     }
   }
 
+  async function deleteSource(sourceId: string) {
+    try {
+      await dataIngestionService.deleteSource(sourceId);
+      message.success(t("dataIngestion.sources.deleted"));
+      await loadCore(true);
+    } catch (error) {
+      message.error(extractRequestErrorMessage(error));
+    }
+  }
+
+  async function deleteDataset(datasetId: string) {
+    try {
+      await dataIngestionService.deleteDataset(datasetId);
+      if (selectedDatasetId === datasetId) {
+        setSelectedDatasetId("");
+      }
+      if (selectedCatalogDatasetId === datasetId) {
+        setSelectedCatalogDatasetId("");
+        setRecords([]);
+        setRecordsTotal(0);
+      }
+      message.success(t("dataIngestion.catalog.deleted"));
+      await loadCore(true);
+    } catch (error) {
+      message.error(extractRequestErrorMessage(error));
+    }
+  }
+
+  function openDatasetEditor(dataset: DataIngestionDataset) {
+    setEditingDatasetId(dataset.id);
+    setDatasetForm({
+      name: dataset.name,
+      description: dataset.description,
+      data_type: dataset.data_type,
+      storage_mode: dataset.storage_mode ?? "auto",
+      upsert_keys: (dataset.upsert_keys ?? []).join(", "),
+    });
+    setDatasetModalOpen(true);
+  }
+
+  function openDatasetCreator() {
+    setEditingDatasetId(null);
+    setDatasetForm({
+      name: "",
+      description: "",
+      data_type: "tabular",
+      storage_mode: "auto",
+      upsert_keys: "",
+    });
+    setDatasetModalOpen(true);
+  }
+
+  async function deletePipeline(pipelineId: string) {
+    try {
+      await dataIngestionService.deletePipeline(pipelineId);
+      message.success(t("dataIngestion.pipelines.deleted"));
+      await loadCore(true);
+    } catch (error) {
+      message.error(extractRequestErrorMessage(error));
+    }
+  }
+
+  async function deleteRun(runId: string) {
+    try {
+      await dataIngestionService.deleteRun(runId);
+      message.success(t("dataIngestion.runs.deleted"));
+      await loadCore(true);
+    } catch (error) {
+      message.error(extractRequestErrorMessage(error));
+    }
+  }
+
+  async function createPipeline(
+    payload: Parameters<typeof dataIngestionService.createPipeline>[0],
+  ) {
+    setCreatingPipeline(true);
+    try {
+      if (editingPipeline) {
+        await dataIngestionService.updatePipeline(editingPipeline.id, {
+          description: payload.description,
+          name: payload.name,
+          steps: payload.steps,
+          supported_types: payload.supported_types,
+          enabled: payload.enabled,
+        });
+      } else {
+        await dataIngestionService.createPipeline(payload);
+      }
+      setPipelineModalOpen(false);
+      message.success(
+        t(editingPipeline ? "dataIngestion.pipelines.updated" : "dataIngestion.pipelines.created"),
+      );
+      setEditingPipeline(null);
+      await loadCore(true);
+    } catch (error) {
+      message.error(extractRequestErrorMessage(error));
+    } finally {
+      setCreatingPipeline(false);
+    }
+  }
+
+  async function runPipeline(
+    inputs: Record<string, unknown>,
+    stepInputs: Record<string, Record<string, unknown>>,
+  ) {
+    if (!runPipelineTarget) return;
+    setRunningPipeline(true);
+    setPipelineRunResult(null);
+    try {
+      const result = await dataIngestionService.runUserPipeline(
+        runPipelineTarget.id,
+        inputs,
+        stepInputs,
+      );
+      setPipelineRunResult(result);
+      message.success(
+        t("dataIngestion.pipelines.runCompleted", {
+          count: result.results.length,
+        }),
+      );
+      if (activeSpaceId) {
+        void dataIngestionService.syncDataSpaceCatalog(activeSpaceId);
+      }
+      await loadCore(true);
+    } catch (error) {
+      message.error(extractRequestErrorMessage(error));
+    } finally {
+      setRunningPipeline(false);
+    }
+  }
+
   async function setScanEnabled(job: DataIngestionAutoScanJob, enabled: boolean) {
     try {
       await dataIngestionService.updateScanJob(job.id, { enabled });
@@ -1093,13 +1445,30 @@ export function DataIngestionWorkbenchScene({
     {
       key: "actions",
       render: (_, item) => (
-        <Button
-          disabled={!can("data_ingestion:modify")}
-          onClick={() => void testSource(item.id)}
-          type="link"
-        >
-          {t("dataIngestion.actions.test")}
-        </Button>
+        <Space>
+          <Button
+            disabled={!can("data_ingestion:modify")}
+            onClick={() => openSourceEditor(item)}
+            type="link"
+          >
+            {t("dataIngestion.agent.edit")}
+          </Button>
+          <Button
+            disabled={!can("data_ingestion:modify")}
+            onClick={() => void testSource(item.id)}
+            type="link"
+          >
+            {t("dataIngestion.actions.test")}
+          </Button>
+          <Popconfirm
+            onConfirm={() => void deleteSource(item.id)}
+            title={t("dataIngestion.actions.delete")}
+          >
+            <Button danger disabled={!can("data_ingestion:delete")} type="link">
+              {t("dataIngestion.actions.delete")}
+            </Button>
+          </Popconfirm>
+        </Space>
       ),
     },
   ];
@@ -1137,6 +1506,11 @@ export function DataIngestionWorkbenchScene({
       key: "inserted",
     },
     {
+      title: t("dataIngestion.runs.updated"),
+      dataIndex: "updated_count",
+      key: "updated",
+    },
+    {
       title: t("dataIngestion.runs.duplicates"),
       dataIndex: "duplicate_count",
       key: "duplicates",
@@ -1156,9 +1530,26 @@ export function DataIngestionWorkbenchScene({
     {
       key: "actions",
       render: (_, item) => (
-        <Button onClick={() => void openRun(item)} type="link">
-          {t("dataIngestion.actions.open")}
-        </Button>
+        <Space>
+          <Button onClick={() => void openRun(item)} type="link">
+            {t("dataIngestion.actions.open")}
+          </Button>
+          <Popconfirm
+            disabled={["queued", "running"].includes(item.status)}
+            onConfirm={() => void deleteRun(item.id)}
+            title={t("dataIngestion.actions.delete")}
+          >
+            <Button
+              danger
+              disabled={
+                !can("data_ingestion:delete") || ["queued", "running"].includes(item.status)
+              }
+              type="link"
+            >
+              {t("dataIngestion.actions.delete")}
+            </Button>
+          </Popconfirm>
+        </Space>
       ),
     },
   ];
@@ -1181,9 +1572,34 @@ export function DataIngestionWorkbenchScene({
       render: (value: string) => t(`dataIngestion.dataTypes.${value}`, { defaultValue: value }),
     },
     {
+      title: t("dataIngestion.catalog.storageMode"),
+      key: "storageMode",
+      render: (_, item) => (
+        <Space direction="vertical" size={0}>
+          <Tag color={item.storage_mode === "dedicated" ? "blue" : "default"}>
+            {t(`dataIngestion.catalog.storageModes.${item.storage_mode}`, {
+              defaultValue: item.storage_mode,
+            })}
+          </Tag>
+          {item.physical_table ? <Text code>{item.physical_table}</Text> : null}
+        </Space>
+      ),
+    },
+    {
       title: t("dataIngestion.catalog.records"),
       dataIndex: "record_count",
       key: "records",
+    },
+    {
+      title: t("dataIngestion.catalog.upsertKeys"),
+      key: "upsertKeys",
+      render: (_, item) => (
+        <Space wrap size={4}>
+          {(item.upsert_keys ?? []).length
+            ? item.upsert_keys?.map((key) => <Tag key={key}>{key}</Tag>)
+            : "-"}
+        </Space>
+      ),
     },
     {
       title: t("dataIngestion.catalog.lastIngested"),
@@ -1194,16 +1610,59 @@ export function DataIngestionWorkbenchScene({
     {
       key: "actions",
       render: (_, item) => (
-        <Button
-          onClick={() => {
-            setSelectedCatalogDatasetId(item.id);
-            setRecordsPage(1);
-            void loadRecords(item.id, 1);
-          }}
-          type="link"
-        >
-          {t("dataIngestion.actions.open")}
-        </Button>
+        <Space size={4}>
+          <Button
+            onClick={() => {
+              setSelectedCatalogDatasetId(item.id);
+              setRecordsPage(1);
+              void loadRecords(item.id, 1);
+            }}
+            type="link"
+          >
+            {t("dataIngestion.actions.open")}
+          </Button>
+          <Button
+            disabled={!can("data_ingestion:modify")}
+            onClick={() => openDatasetEditor(item)}
+            type="link"
+          >
+            {t("dataIngestion.agent.edit")}
+          </Button>
+          {onOpenCatalogResource ? (
+            <>
+              <Button
+                onClick={() =>
+                  onOpenCatalogResource(
+                    `data-ingestion:dataset:${encodeURIComponent(activeSpaceId)}:${encodeURIComponent(item.id)}`,
+                    "detail",
+                  )
+                }
+                type="link"
+              >
+                {t("dataIngestion.actions.openCatalog")}
+              </Button>
+              <Button
+                onClick={() =>
+                  onOpenCatalogResource(
+                    `data-ingestion:dataset:${encodeURIComponent(activeSpaceId)}:${encodeURIComponent(item.id)}`,
+                    "index",
+                  )
+                }
+                type="link"
+              >
+                {t("dataIngestion.actions.openIndex")}
+              </Button>
+            </>
+          ) : null}
+          <Popconfirm
+            onConfirm={() => void deleteDataset(item.id)}
+            title={t("dataIngestion.actions.delete")}
+          >
+            <Button danger disabled={!can("data_ingestion:delete")} type="link">
+              {t("dataIngestion.actions.delete")}
+            </Button>
+          </Popconfirm>
+        </Space>
       ),
     },
   ];
@@ -1365,6 +1824,13 @@ export function DataIngestionWorkbenchScene({
       width: 120,
     },
     {
+      title: "MCP",
+      dataIndex: "tool_name",
+      key: "toolName",
+      render: (value: string | undefined) => (value ? <Text code>{value}</Text> : "-"),
+      width: 190,
+    },
+    {
       title: t("dataIngestion.pipelines.stepInput"),
       dataIndex: "input",
       key: "input",
@@ -1404,7 +1870,6 @@ export function DataIngestionWorkbenchScene({
     { key: "import", label: t("dataIngestion.tabs.import") },
     { key: "pipelines", label: t("dataIngestion.tabs.pipelines") },
     { key: "sources", label: t("dataIngestion.tabs.sources") },
-    { key: "runs", label: t("dataIngestion.tabs.runs") },
     { key: "auto-scan", label: t("dataIngestion.tabs.autoScan") },
     ...(can("data_ingestion:agent_use")
       ? [{ key: "agent", label: t("dataIngestion.tabs.agent") }]
@@ -1507,7 +1972,7 @@ export function DataIngestionWorkbenchScene({
                     <Button
                       disabled={!can("data_ingestion:create")}
                       icon={<PlusOutlined />}
-                      onClick={() => setDatasetModalOpen(true)}
+                      onClick={openDatasetCreator}
                     >
                       {t("dataIngestion.actions.createDataset")}
                     </Button>
@@ -1529,14 +1994,19 @@ export function DataIngestionWorkbenchScene({
                 </Form.Item>
               </Col>
               <Col md={8} xs={24}>
-                <Form.Item label={t("dataIngestion.import.source")}>
+                <Form.Item
+                  extra={t("dataIngestion.import.sourceUploadOnly")}
+                  label={t("dataIngestion.import.source")}
+                >
                   <Select
                     allowClear
                     onChange={setSelectedSourceId}
-                    options={sources.map((item) => ({
-                      label: item.name,
-                      value: item.id,
-                    }))}
+                    options={sources
+                      .filter((item) => item.source_type === "upload")
+                      .map((item) => ({
+                        label: item.name,
+                        value: item.id,
+                      }))}
                     value={selectedSourceId || undefined}
                   />
                 </Form.Item>
@@ -1544,7 +2014,10 @@ export function DataIngestionWorkbenchScene({
             </Row>
             <Space>
               <Button
-                disabled={!can("data_ingestion:create")}
+                disabled={
+                  !can("data_ingestion:create") ||
+                  Boolean(activeRun && ["queued", "running"].includes(activeRun.status))
+                }
                 loading={ingesting}
                 onClick={() => void startIngestion()}
                 type="primary"
@@ -1668,7 +2141,22 @@ export function DataIngestionWorkbenchScene({
 
   function renderPipelines() {
     return (
-      <Card title={t("dataIngestion.pipelines.title")}>
+      <Card
+        extra={
+          <Button
+            disabled={!can("data_ingestion:task_manage")}
+            icon={<PlusOutlined />}
+            onClick={() => {
+              setEditingPipeline(null);
+              setPipelineModalOpen(true);
+            }}
+            type="primary"
+          >
+            {t("dataIngestion.pipelines.create")}
+          </Button>
+        }
+        title={t("dataIngestion.pipelines.title")}
+      >
         <Paragraph type="secondary">{t("dataIngestion.pipelines.description")}</Paragraph>
         {templates.length ? (
           <Row gutter={[16, 16]}>
@@ -1680,16 +2168,54 @@ export function DataIngestionWorkbenchScene({
                     <Button key="detail" onClick={() => setPipelineDrawer(template)} type="link">
                       {t("dataIngestion.pipelines.steps")}
                     </Button>,
-                    <Button
-                      key="use"
-                      onClick={() => {
-                        setSelectedTemplateCode(template.code);
-                        onViewChange("import");
-                      }}
-                      type="link"
-                    >
-                      {t("dataIngestion.pipelines.useTemplate")}
-                    </Button>,
+                    ...(template.code.startsWith("user-")
+                      ? [
+                          <Button
+                            key="run"
+                            onClick={() => {
+                              setPipelineRunResult(null);
+                              setRunPipelineTarget(template);
+                            }}
+                            type="link"
+                          >
+                            {t("dataIngestion.pipelines.run")}
+                          </Button>,
+                          <Button
+                            key="edit"
+                            disabled={!can("data_ingestion:task_manage")}
+                            onClick={() => {
+                              setEditingPipeline(template);
+                              setPipelineModalOpen(true);
+                            }}
+                            type="link"
+                          >
+                            {t("dataIngestion.agent.edit")}
+                          </Button>,
+                          <Popconfirm
+                            key="delete"
+                            onConfirm={() => void deletePipeline(template.id)}
+                            title={t("dataIngestion.actions.delete")}
+                          >
+                            <Button danger disabled={!can("data_ingestion:delete")} type="link">
+                              {t("dataIngestion.actions.delete")}
+                            </Button>
+                          </Popconfirm>,
+                        ]
+                      : [
+                          <Button
+                            key="use"
+                            onClick={() => {
+                              setSelectedTemplateCode(template.code);
+                              onViewChange("import");
+                            }}
+                            type="link"
+                          >
+                            {t("dataIngestion.pipelines.useTemplate")}
+                          </Button>,
+                          <Tag key="builtin" color="gold">
+                            {t("dataIngestion.pipelines.builtInLocked")}
+                          </Tag>,
+                        ]),
                   ]}
                   size="small"
                 >
@@ -1723,7 +2249,33 @@ export function DataIngestionWorkbenchScene({
             <Button
               disabled={!can("data_ingestion:create")}
               icon={<PlusOutlined />}
-              onClick={() => setSourceModalOpen(true)}
+              onClick={() => {
+                setEditingSourceId(null);
+                setSourceForm({
+                  body: "{}",
+                  headers: "{}",
+                  name: "",
+                  source_type: "upload",
+                  method: "GET",
+                  pagination_type: "none",
+                  page_param: "page",
+                  page_size: "100",
+                  max_pages: "10",
+                  next_url_path: "",
+                  host: "",
+                  port: "",
+                  path: "",
+                  username: "",
+                  password: "",
+                  database: "",
+                  private_key: "",
+                  query: "",
+                  record_path: "",
+                  use_tls: false,
+                  watermark_column: "",
+                });
+                setSourceModalOpen(true);
+              }}
               type="primary"
             >
               {t("dataIngestion.actions.createSource")}
@@ -1785,54 +2337,6 @@ export function DataIngestionWorkbenchScene({
     );
   }
 
-  function renderRuns() {
-    return (
-      <Space direction="vertical" size={16} style={{ width: "100%" }}>
-        {runId && routeRun ? (
-          <RunDetailCard
-            canRetry={can("data_ingestion:task_manage")}
-            onBack={onBack}
-            onDownload={() => void downloadRunAsset(routeRun)}
-            onRetry={() => void retryRun(routeRun)}
-            run={routeRun}
-            template={templates.find((template) => template.code === routeRun.template_code)}
-          />
-        ) : null}
-        <Card title={t("dataIngestion.runs.title")}>
-          <Paragraph type="secondary">{t("dataIngestion.runs.description")}</Paragraph>
-          <Space className={styles.filterBar} wrap>
-            <Input
-              allowClear
-              onChange={(event) => setRunSearch(event.target.value)}
-              placeholder={t("dataIngestion.runs.search")}
-              prefix={<SearchOutlined />}
-              value={runSearch}
-            />
-            <Select
-              allowClear
-              onChange={setRunStatus}
-              options={["queued", "running", "success", "failed"].map((value) => ({
-                value,
-                label: t(`dataIngestion.status.${value}`),
-              }))}
-              placeholder={t("dataIngestion.runs.statusFilter")}
-              style={{ minWidth: 160 }}
-              value={runStatus || undefined}
-            />
-            <Text type="secondary">{visibleRuns.length}</Text>
-          </Space>
-          <Table
-            columns={runColumns}
-            dataSource={visibleRuns}
-            locale={{ emptyText: t("dataIngestion.runs.empty") }}
-            rowKey="id"
-            scroll={{ x: 1100 }}
-          />
-        </Card>
-      </Space>
-    );
-  }
-
   function renderCatalog() {
     return (
       <Space direction="vertical" size={16} style={{ width: "100%" }}>
@@ -1841,7 +2345,7 @@ export function DataIngestionWorkbenchScene({
             <Button
               disabled={!can("data_ingestion:create")}
               icon={<PlusOutlined />}
-              onClick={() => setDatasetModalOpen(true)}
+              onClick={openDatasetCreator}
             >
               {t("dataIngestion.actions.createDataset")}
             </Button>
@@ -1947,21 +2451,20 @@ export function DataIngestionWorkbenchScene({
     );
   }
 
-  const sourceNeedsEndpoint = ["ftp", "sftp", "mysql", "postgres", "api"].includes(
-    sourceForm.source_type,
-  );
+  const sourceNeedsEndpoint = ["ftp", "sftp", "mysql", "postgres"].includes(sourceForm.source_type);
   const sourceNeedsCredentials = ["ftp", "sftp", "mysql", "postgres"].includes(
     sourceForm.source_type,
   );
   const sourceNeedsDirectory = ["local_dir", "ftp", "sftp"].includes(sourceForm.source_type);
   const sourceIsDatabase = ["mysql", "postgres"].includes(sourceForm.source_type);
+  const sourceIsApi = sourceForm.source_type === "api";
+  const scanUsesFiles = ["local", "ftp", "sftp"].includes(scanForm.scan_type);
 
   const viewContent = {
     overview: renderOverview,
     import: renderImport,
     pipelines: renderPipelines,
     sources: renderSources,
-    runs: renderRuns,
     catalog: renderCatalog,
     "auto-scan": renderAutoScan,
     agent: () =>
@@ -2328,18 +2831,56 @@ export function DataIngestionWorkbenchScene({
         </Form>
       </Modal>
 
+      <PipelineComposerModal
+        initialTemplate={editingPipeline}
+        onCancel={() => {
+          setEditingPipeline(null);
+          setPipelineModalOpen(false);
+        }}
+        onSave={(payload) => void createPipeline(payload)}
+        open={pipelineModalOpen}
+        saving={creatingPipeline}
+        tools={agentManifest?.tools ?? []}
+      />
+
+      <PipelineRunModal
+        onCancel={() => {
+          setRunPipelineTarget(null);
+          setPipelineRunResult(null);
+        }}
+        onRun={(inputs, stepInputs) => void runPipeline(inputs, stepInputs)}
+        open={Boolean(runPipelineTarget)}
+        result={pipelineRunResult}
+        running={runningPipeline}
+        template={runPipelineTarget}
+        tools={agentManifest?.tools ?? []}
+      />
+
       <Modal
         footer={[
-          <Button key="cancel" onClick={() => setSourceModalOpen(false)}>
+          <Button
+            key="cancel"
+            onClick={() => {
+              setEditingSourceId(null);
+              setSourceModalOpen(false);
+            }}
+          >
             {t("dataIngestion.actions.cancel")}
           </Button>,
           <Button key="save" onClick={() => void saveSource()} type="primary">
             {t("dataIngestion.actions.save")}
           </Button>,
         ]}
-        onCancel={() => setSourceModalOpen(false)}
+        onCancel={() => {
+          setEditingSourceId(null);
+          setSourceModalOpen(false);
+        }}
         open={sourceModalOpen}
-        title={t("dataIngestion.actions.createSource")}
+        title={
+          editingSourceId
+            ? t("dataIngestion.sources.editTitle")
+            : t("dataIngestion.actions.createSource")
+        }
       >
         <Form layout="vertical">
           <Form.Item label={t("dataIngestion.sources.name")} required>
@@ -2363,6 +2904,173 @@ export function DataIngestionWorkbenchScene({
               value={sourceForm.source_type}
             />
           </Form.Item>
+          {sourceIsApi ? (
+            <>
+              <Row gutter={12}>
+                <Col span={7}>
+                  <Form.Item label={t("dataIngestion.sources.method")}>
+                    <Select
+                      onChange={(method) => setSourceForm((current) => ({ ...current, method }))}
+                      options={["GET", "POST", "PUT", "PATCH"].map((method) => ({
+                        label: method,
+                        value: method,
+                      }))}
+                      value={sourceForm.method}
+                    />
+                  </Form.Item>
+                </Col>
+                <Col span={17}>
+                  <Form.Item label={t("dataIngestion.sources.url")}>
+                    <Input
+                      onChange={(event) =>
+                        setSourceForm((current) => ({
+                          ...current,
+                          host: event.target.value,
+                        }))
+                      }
+                      placeholder="https://api.example.com/data"
+                      value={sourceForm.host}
+                    />
+                  </Form.Item>
+                </Col>
+              </Row>
+              <Form.Item
+                extra={t("dataIngestion.sources.headersHint")}
+                label={t("dataIngestion.sources.headers")}
+              >
+                <Input.TextArea
+                  autoSize={{ minRows: 3, maxRows: 8 }}
+                  onChange={(event) =>
+                    setSourceForm((current) => ({
+                      ...current,
+                      headers: event.target.value,
+                    }))
+                  }
+                  value={sourceForm.headers}
+                />
+              </Form.Item>
+              <Form.Item
+                extra={t("dataIngestion.sources.bodyHint")}
+                label={t("dataIngestion.sources.body")}
+              >
+                <Input.TextArea
+                  autoSize={{ minRows: 3, maxRows: 8 }}
+                  onChange={(event) =>
+                    setSourceForm((current) => ({
+                      ...current,
+                      body: event.target.value,
+                    }))
+                  }
+                  value={sourceForm.body}
+                />
+              </Form.Item>
+              <Form.Item
+                extra={t("dataIngestion.sources.recordPathHint")}
+                label={t("dataIngestion.sources.recordPath")}
+              >
+                <Input
+                  onChange={(event) =>
+                    setSourceForm((current) => ({
+                      ...current,
+                      record_path: event.target.value,
+                    }))
+                  }
+                  placeholder="data.items"
+                  value={sourceForm.record_path}
+                />
+              </Form.Item>
+              <Row gutter={12}>
+                <Col span={8}>
+                  <Form.Item label={t("dataIngestion.sources.paginationType")}>
+                    <Select
+                      onChange={(pagination_type) =>
+                        setSourceForm((current) => ({
+                          ...current,
+                          pagination_type,
+                        }))
+                      }
+                      options={[
+                        {
+                          label: t("dataIngestion.sources.paginationNone"),
+                          value: "none",
+                        },
+                        {
+                          label: t("dataIngestion.sources.paginationPage"),
+                          value: "page",
+                        },
+                        {
+                          label: t("dataIngestion.sources.paginationNext"),
+                          value: "next_url",
+                        },
+                      ]}
+                      value={sourceForm.pagination_type}
+                    />
+                  </Form.Item>
+                </Col>
+                {sourceForm.pagination_type === "page" ? (
+                  <>
+                    <Col span={8}>
+                      <Form.Item label={t("dataIngestion.sources.pageParam")}>
+                        <Input
+                          onChange={(event) =>
+                            setSourceForm((current) => ({
+                              ...current,
+                              page_param: event.target.value,
+                            }))
+                          }
+                          value={sourceForm.page_param}
+                        />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item label={t("dataIngestion.sources.pageSize")}>
+                        <Input
+                          onChange={(event) =>
+                            setSourceForm((current) => ({
+                              ...current,
+                              page_size: event.target.value,
+                            }))
+                          }
+                          value={sourceForm.page_size}
+                        />
+                      </Form.Item>
+                    </Col>
+                  </>
+                ) : null}
+                {sourceForm.pagination_type === "next_url" ? (
+                  <Col span={16}>
+                    <Form.Item label={t("dataIngestion.sources.nextUrlPath")}>
+                      <Input
+                        onChange={(event) =>
+                          setSourceForm((current) => ({
+                            ...current,
+                            next_url_path: event.target.value,
+                          }))
+                        }
+                        placeholder="links.next"
+                        value={sourceForm.next_url_path}
+                      />
+                    </Form.Item>
+                  </Col>
+                ) : null}
+                {sourceForm.pagination_type !== "none" ? (
+                  <Col span={8}>
+                    <Form.Item label={t("dataIngestion.sources.maxPages")}>
+                      <Input
+                        onChange={(event) =>
+                          setSourceForm((current) => ({
+                            ...current,
+                            max_pages: event.target.value,
+                          }))
+                        }
+                        value={sourceForm.max_pages}
+                      />
+                    </Form.Item>
+                  </Col>
+                ) : null}
+              </Row>
+            </>
+          ) : null}
           {sourceNeedsEndpoint ? (
             <Row gutter={12}>
               <Col span={16}>
@@ -2419,11 +3127,42 @@ export function DataIngestionWorkbenchScene({
                         password: event.target.value,
                       }))
                     }
+                    placeholder={
+                      editingSourceId ? t("dataIngestion.sources.passwordKeep") : undefined
+                    }
                     value={sourceForm.password}
                   />
                 </Form.Item>
               </Col>
             </Row>
+          ) : null}
+          {sourceForm.source_type === "sftp" ? (
+            <Form.Item
+              extra={t("dataIngestion.sources.privateKeyHint")}
+              label={t("dataIngestion.sources.privateKey")}
+            >
+              <Input.TextArea
+                autoSize={{ minRows: 3, maxRows: 8 }}
+                onChange={(event) =>
+                  setSourceForm((current) => ({
+                    ...current,
+                    private_key: event.target.value,
+                  }))
+                }
+                placeholder={
+                  editingSourceId ? t("dataIngestion.sources.privateKeyKeep") : undefined
+                }
+                value={sourceForm.private_key}
+              />
+            </Form.Item>
+          ) : null}
+          {sourceForm.source_type === "ftp" ? (
+            <Form.Item label={t("dataIngestion.sources.ftpTls")}>
+              <Switch
+                checked={sourceForm.use_tls}
+                onChange={(use_tls) => setSourceForm((current) => ({ ...current, use_tls }))}
+              />
+            </Form.Item>
           ) : null}
           {sourceNeedsDirectory ? (
             <Form.Item label={t("dataIngestion.sources.path")}>
@@ -2455,7 +3194,10 @@ export function DataIngestionWorkbenchScene({
                   </Form.Item>
                 </Col>
                 <Col span={12}>
-                  <Form.Item label={t("dataIngestion.sources.watermark")}>
+                  <Form.Item
+                    extra={t("dataIngestion.sources.watermarkHint")}
+                    label={t("dataIngestion.sources.watermark")}
+                  >
                     <Input
                       onChange={(event) =>
                         setSourceForm((current) => ({
@@ -2487,16 +3229,29 @@ export function DataIngestionWorkbenchScene({
 
       <Modal
         footer={[
-          <Button key="cancel" onClick={() => setDatasetModalOpen(false)}>
+          <Button
+            key="cancel"
+            onClick={() => {
+              setEditingDatasetId(null);
+              setDatasetModalOpen(false);
+            }}
+          >
             {t("dataIngestion.actions.cancel")}
           </Button>,
           <Button key="save" onClick={() => void saveDataset()} type="primary">
             {t("dataIngestion.actions.save")}
           </Button>,
         ]}
-        onCancel={() => setDatasetModalOpen(false)}
+        onCancel={() => {
+          setEditingDatasetId(null);
+          setDatasetModalOpen(false);
+        }}
         open={datasetModalOpen}
-        title={t("dataIngestion.actions.createDataset")}
+        title={
+          editingDatasetId
+            ? t("dataIngestion.catalog.editTitle")
+            : t("dataIngestion.actions.createDataset")
+        }
       >
         <Form layout="vertical">
           <Form.Item label={t("dataIngestion.catalog.datasetName")} required>
@@ -2515,6 +3270,40 @@ export function DataIngestionWorkbenchScene({
                 label: t(`dataIngestion.dataTypes.${value}`),
               }))}
               value={datasetForm.data_type}
+            />
+          </Form.Item>
+          <Form.Item
+            extra={t("dataIngestion.catalog.storageModeHint")}
+            label={t("dataIngestion.catalog.storageMode")}
+          >
+            <Select
+              onChange={(storage_mode) =>
+                setDatasetForm((current) => ({
+                  ...current,
+                  storage_mode,
+                }))
+              }
+              options={["auto", "shared", "dedicated"].map((value) => ({
+                value,
+                label: t(`dataIngestion.catalog.storageModes.${value}`),
+              }))}
+              disabled={Boolean(editingDatasetId)}
+              value={datasetForm.storage_mode}
+            />
+          </Form.Item>
+          <Form.Item
+            extra={t("dataIngestion.catalog.upsertKeysHint")}
+            label={t("dataIngestion.catalog.upsertKeys")}
+          >
+            <Input
+              onChange={(event) =>
+                setDatasetForm((current) => ({
+                  ...current,
+                  upsert_keys: event.target.value,
+                }))
+              }
+              placeholder="id, tenant_id"
+              value={datasetForm.upsert_keys}
             />
           </Form.Item>
           <Form.Item label={t("dataIngestion.catalog.descriptionLabel")}>
@@ -2689,41 +3478,45 @@ export function DataIngestionWorkbenchScene({
               )}
             </Col>
           </Row>
+          {scanUsesFiles ? (
+            <Row gutter={12}>
+              <Col span={12}>
+                <Form.Item label={t("dataIngestion.autoScan.filePattern")}>
+                  <Input
+                    onChange={(event) =>
+                      setScanForm((current) => ({
+                        ...current,
+                        file_pattern: event.target.value,
+                      }))
+                    }
+                    value={scanForm.file_pattern}
+                  />
+                </Form.Item>
+              </Col>
+              <Col span={12}>
+                <Form.Item label={t("dataIngestion.autoScan.recursive")}>
+                  <Switch
+                    checked={scanForm.recursive}
+                    onChange={(recursive) => setScanForm((current) => ({ ...current, recursive }))}
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
+          ) : null}
           <Row gutter={12}>
-            <Col span={12}>
-              <Form.Item label={t("dataIngestion.autoScan.filePattern")}>
-                <Input
-                  onChange={(event) =>
-                    setScanForm((current) => ({
-                      ...current,
-                      file_pattern: event.target.value,
-                    }))
-                  }
-                  value={scanForm.file_pattern}
-                />
-              </Form.Item>
-            </Col>
-            <Col span={12}>
-              <Form.Item label={t("dataIngestion.autoScan.recursive")}>
-                <Switch
-                  checked={scanForm.recursive}
-                  onChange={(recursive) => setScanForm((current) => ({ ...current, recursive }))}
-                />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Row gutter={12}>
-            <Col span={18}>
-              <Form.Item label={t("dataIngestion.autoScan.scanPath")}>
-                <Input
-                  onChange={(event) =>
-                    setScanForm((current) => ({ ...current, path: event.target.value }))
-                  }
-                  value={scanForm.path}
-                />
-              </Form.Item>
-            </Col>
-            <Col span={6}>
+            {scanUsesFiles ? (
+              <Col span={18}>
+                <Form.Item label={t("dataIngestion.autoScan.scanPath")}>
+                  <Input
+                    onChange={(event) =>
+                      setScanForm((current) => ({ ...current, path: event.target.value }))
+                    }
+                    value={scanForm.path}
+                  />
+                </Form.Item>
+              </Col>
+            ) : null}
+            <Col span={scanUsesFiles ? 6 : 24}>
               <Form.Item label={t("dataIngestion.autoScan.timezone")}>
                 <Input
                   onChange={(event) =>

@@ -22,12 +22,16 @@ import type {
   DataIngestionControlDatabaseRequest,
   DataIngestionControlDatabaseStatus,
   DataIngestionControlDatabaseTestResult,
+  DataIngestionCustomMcpTool,
+  DataIngestionCustomSkill,
   DataIngestionDataSource,
   DataIngestionDataset,
   DataIngestionDatasetRecord,
   DataIngestionInspection,
   DataIngestionOverview,
   DataIngestionPipelineTemplate,
+  DataIngestionPipelineRunResult,
+  DataIngestionPipelineExecution,
   DataIngestionRun,
   DataIngestionRunListItem,
   DataIngestionSpace,
@@ -90,6 +94,16 @@ export const dataIngestionService = {
       )
       .then((r) => r.data),
 
+  syncDataSpaceCatalog: (spaceId: string) =>
+    http
+      .post<{
+        catalog_id: string;
+        created: boolean;
+        discovery_started: boolean;
+        database_label: string;
+      }>(`${PREFIX}/spaces/${encodeURIComponent(spaceId)}/catalog-sync`)
+      .then((r) => r.data),
+
   overview: () => scopedHttp.get<DataIngestionOverview>(`${PREFIX}/overview`).then((r) => r.data),
 
   listSources: () =>
@@ -98,10 +112,23 @@ export const dataIngestionService = {
   createSource: (payload: { name: string; source_type: string; config: Record<string, unknown> }) =>
     scopedHttp.post<DataIngestionDataSource>(`${PREFIX}/sources`, payload).then((r) => r.data),
 
+  updateSource: (
+    sourceId: string,
+    payload: Partial<{ name: string; source_type: string; config: Record<string, unknown> }>,
+  ) =>
+    scopedHttp
+      .put<DataIngestionDataSource>(`${PREFIX}/sources/${encodeURIComponent(sourceId)}`, payload)
+      .then((r) => r.data),
+
   testSource: (sourceId: string) =>
     scopedHttp
-      .post<DataIngestionDataSource>(`${PREFIX}/sources/${sourceId}/test`)
+      .post<DataIngestionDataSource & { test_result?: Record<string, unknown> }>(
+        `${PREFIX}/sources/${sourceId}/test`,
+      )
       .then((r) => r.data),
+
+  deleteSource: (sourceId: string) =>
+    scopedHttp.delete(`${PREFIX}/sources/${encodeURIComponent(sourceId)}`),
 
   listDatasets: (q = "") =>
     scopedHttp
@@ -110,13 +137,37 @@ export const dataIngestionService = {
       })
       .then((r) => r.data),
 
-  createDataset: (payload: { name: string; description: string; data_type: string }) => {
+  createDataset: (payload: {
+    name: string;
+    description: string;
+    data_type: string;
+    storage_mode?: "auto" | "shared" | "dedicated";
+    upsert_keys?: string[];
+  }) => {
     const body = new FormData();
     body.append("name", payload.name);
     body.append("description", payload.description);
     body.append("data_type", payload.data_type);
+    body.append("storage_mode", payload.storage_mode ?? "auto");
+    body.append("upsert_keys", (payload.upsert_keys ?? []).join(","));
     return scopedHttp.post<DataIngestionDataset>(`${PREFIX}/datasets`, body).then((r) => r.data);
   },
+
+  updateDataset: (
+    datasetId: string,
+    payload: {
+      name?: string;
+      description?: string;
+      data_type?: string;
+      upsert_keys?: string[];
+    },
+  ) =>
+    scopedHttp
+      .put<DataIngestionDataset>(`${PREFIX}/datasets/${encodeURIComponent(datasetId)}`, payload)
+      .then((r) => r.data),
+
+  deleteDataset: (datasetId: string) =>
+    scopedHttp.delete(`${PREFIX}/datasets/${encodeURIComponent(datasetId)}`),
 
   listTemplates: () =>
     scopedHttp.get<DataIngestionPipelineTemplate[]>(`${PREFIX}/templates`).then((r) => r.data),
@@ -125,6 +176,111 @@ export const dataIngestionService = {
     scopedHttp
       .get<DataIngestionPipelineTemplate>(`${PREFIX}/templates/${encodeURIComponent(templateCode)}`)
       .then((r) => r.data),
+
+  createPipeline: (payload: {
+    code: string;
+    name: string;
+    description: string;
+    supported_types: string[];
+    steps: Record<string, unknown>[];
+    enabled: boolean;
+  }) =>
+    scopedHttp
+      .post<DataIngestionPipelineTemplate>(`${PREFIX}/capabilities/pipelines`, payload)
+      .then((r) => r.data),
+
+  updatePipeline: (
+    pipelineId: string,
+    payload: Partial<{
+      name: string;
+      description: string;
+      supported_types: string[];
+      steps: Record<string, unknown>[];
+      enabled: boolean;
+    }>,
+  ) =>
+    scopedHttp
+      .put<DataIngestionPipelineTemplate>(
+        `${PREFIX}/capabilities/pipelines/${encodeURIComponent(pipelineId)}`,
+        payload,
+      )
+      .then((r) => r.data),
+
+  deletePipeline: (pipelineId: string) =>
+    scopedHttp.delete(`${PREFIX}/capabilities/pipelines/${encodeURIComponent(pipelineId)}`),
+
+  runUserPipeline: (
+    pipelineId: string,
+    inputs: Record<string, unknown> = {},
+    stepInputs: Record<string, Record<string, unknown>> = {},
+  ) =>
+    scopedHttp
+      .post<DataIngestionPipelineRunResult>(
+        `${PREFIX}/capabilities/pipelines/${encodeURIComponent(pipelineId)}/run`,
+        {
+          inputs,
+          step_inputs: stepInputs,
+        },
+      )
+      .then((r) => r.data),
+
+  listPipelineExecutions: () =>
+    scopedHttp
+      .get<DataIngestionPipelineExecution[]>(`${PREFIX}/capabilities/pipeline-executions`, {
+        params: { limit: 200 },
+      })
+      .then((r) => r.data),
+
+  listPipelineExecutionsForSpace: (spaceId: string) =>
+    http
+      .get<DataIngestionPipelineExecution[]>(`${PREFIX}/capabilities/pipeline-executions`, {
+        headers: { "x-data-ingestion-space": spaceId },
+        params: { limit: 200 },
+      })
+      .then((r) => r.data),
+
+  listPipelineExecutionsForSpacePage: (spaceId: string, page = 1, pageSize = 200) =>
+    http
+      .get<{
+        items: DataIngestionPipelineExecution[];
+        page: number;
+        page_size: number;
+        total: number;
+      }>(`${PREFIX}/capabilities/pipeline-executions/page`, {
+        headers: { "x-data-ingestion-space": spaceId },
+        params: { page, page_size: pageSize },
+      })
+      .then((r) => r.data),
+
+  async listAllPipelineExecutionsForSpace(spaceId: string) {
+    const items: DataIngestionPipelineExecution[] = [];
+    let page = 1;
+    let total = 0;
+    do {
+      const result = await dataIngestionService.listPipelineExecutionsForSpacePage(
+        spaceId,
+        page,
+        200,
+      );
+      items.push(...result.items);
+      total = result.total;
+      if (!result.items.length) {
+        break;
+      }
+      page += 1;
+    } while (items.length < total);
+    return items;
+  },
+
+  deletePipelineExecution: (executionId: string) =>
+    scopedHttp.delete(
+      `${PREFIX}/capabilities/pipeline-executions/${encodeURIComponent(executionId)}`,
+    ),
+
+  deletePipelineExecutionForSpace: (spaceId: string, executionId: string) =>
+    http.delete(`${PREFIX}/capabilities/pipeline-executions/${encodeURIComponent(executionId)}`, {
+      headers: { "x-data-ingestion-space": spaceId },
+    }),
 
   getStorageInfo: () =>
     scopedHttp.get<DataIngestionStorageInfo>(`${PREFIX}/storage/info`).then((r) => r.data),
@@ -163,6 +319,88 @@ export const dataIngestionService = {
         },
       })
       .then((r) => r.data),
+
+  listRunsForSpace: (
+    spaceId: string,
+    params?: { status?: string; datasetId?: string; limit?: number },
+  ) =>
+    http
+      .get<DataIngestionRunListItem[]>(`${PREFIX}/runs`, {
+        headers: { "x-data-ingestion-space": spaceId },
+        params: {
+          status: params?.status,
+          dataset_id: params?.datasetId,
+          limit: params?.limit ?? 100,
+        },
+      })
+      .then((r) => r.data),
+
+  listRunsForSpacePage: (
+    spaceId: string,
+    params?: {
+      page?: number;
+      pageSize?: number;
+      status?: string;
+      datasetId?: string;
+    },
+  ) =>
+    http
+      .get<{
+        items: DataIngestionRunListItem[];
+        page: number;
+        page_size: number;
+        total: number;
+      }>(`${PREFIX}/runs/page`, {
+        headers: { "x-data-ingestion-space": spaceId },
+        params: {
+          page: params?.page ?? 1,
+          page_size: params?.pageSize ?? 200,
+          status: params?.status || undefined,
+          dataset_id: params?.datasetId || undefined,
+        },
+      })
+      .then((r) => r.data),
+
+  async listAllRunsForSpace(spaceId: string, params?: { status?: string; datasetId?: string }) {
+    const items: DataIngestionRunListItem[] = [];
+    let page = 1;
+    let total = 0;
+    do {
+      const result = await dataIngestionService.listRunsForSpacePage(spaceId, {
+        ...params,
+        page,
+        pageSize: 200,
+      });
+      items.push(...result.items);
+      total = result.total;
+      if (!result.items.length) {
+        break;
+      }
+      page += 1;
+    } while (items.length < total);
+    return items;
+  },
+
+  listDatasetsForSpace: (spaceId: string) =>
+    http
+      .get<DataIngestionDataset[]>(`${PREFIX}/datasets`, {
+        headers: { "x-data-ingestion-space": spaceId },
+      })
+      .then((r) => r.data),
+
+  getRunForSpace: (spaceId: string, runId: string) =>
+    http
+      .get<DataIngestionRun>(`${PREFIX}/runs/${encodeURIComponent(runId)}`, {
+        headers: { "x-data-ingestion-space": spaceId },
+      })
+      .then((r) => r.data),
+
+  deleteRun: (runId: string) => scopedHttp.delete(`${PREFIX}/runs/${encodeURIComponent(runId)}`),
+
+  deleteRunForSpace: (spaceId: string, runId: string) =>
+    http.delete(`${PREFIX}/runs/${encodeURIComponent(runId)}`, {
+      headers: { "x-data-ingestion-space": spaceId },
+    }),
 
   getRun: (runId: string) =>
     scopedHttp.get<DataIngestionRun>(`${PREFIX}/runs/${runId}`).then((r) => r.data),
@@ -219,6 +457,79 @@ export const dataIngestionService = {
 
   getAgentSkill: () =>
     scopedHttp.get<DataIngestionAgentSkill>(`${PREFIX}/agent/skill`).then((r) => r.data),
+
+  listCustomMcpTools: () =>
+    scopedHttp
+      .get<DataIngestionCustomMcpTool[]>(`${PREFIX}/capabilities/mcp-tools`)
+      .then((r) => r.data),
+
+  createCustomMcpTool: (payload: {
+    name: string;
+    display_name: string;
+    description: string;
+    read_only: boolean;
+    requires_approval: boolean;
+    tool_type: "http";
+    config: Record<string, unknown>;
+    enabled: boolean;
+  }) =>
+    scopedHttp
+      .post<DataIngestionCustomMcpTool>(`${PREFIX}/capabilities/mcp-tools`, payload)
+      .then((r) => r.data),
+
+  updateCustomMcpTool: (
+    toolId: string,
+    payload: Partial<{
+      display_name: string;
+      description: string;
+      read_only: boolean;
+      requires_approval: boolean;
+      config: Record<string, unknown>;
+      enabled: boolean;
+    }>,
+  ) =>
+    scopedHttp
+      .put<DataIngestionCustomMcpTool>(
+        `${PREFIX}/capabilities/mcp-tools/${encodeURIComponent(toolId)}`,
+        payload,
+      )
+      .then((r) => r.data),
+
+  deleteCustomMcpTool: (toolId: string) =>
+    scopedHttp.delete(`${PREFIX}/capabilities/mcp-tools/${encodeURIComponent(toolId)}`),
+
+  listCustomSkills: () =>
+    scopedHttp.get<DataIngestionCustomSkill[]>(`${PREFIX}/capabilities/skills`).then((r) => r.data),
+
+  createCustomSkill: (payload: {
+    name: string;
+    display_name: string;
+    description: string;
+    content: string;
+    enabled: boolean;
+  }) =>
+    scopedHttp
+      .post<DataIngestionCustomSkill>(`${PREFIX}/capabilities/skills`, payload)
+      .then((r) => r.data),
+
+  updateCustomSkill: (
+    skillId: string,
+    payload: Partial<{
+      display_name: string;
+      description: string;
+      content: string;
+      enabled: boolean;
+    }>,
+  ) =>
+    scopedHttp
+      .put<DataIngestionCustomSkill>(
+        `${PREFIX}/capabilities/skills/${encodeURIComponent(skillId)}`,
+        payload,
+      )
+      .then((r) => r.data),
+
+  deleteCustomSkill: (skillId: string) =>
+    scopedHttp.delete(`${PREFIX}/capabilities/skills/${encodeURIComponent(skillId)}`),
 
   getAgentStatus: () =>
     scopedHttp.get<DataIngestionAgentStatus>(`${PREFIX}/agent/status`).then((r) => r.data),

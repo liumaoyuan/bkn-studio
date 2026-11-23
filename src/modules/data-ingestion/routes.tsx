@@ -30,7 +30,6 @@ const pageHandles = {
   import: "dataIngestion.tabs.import",
   pipelines: "dataIngestion.tabs.pipelines",
   sources: "dataIngestion.tabs.sources",
-  runs: "dataIngestion.tabs.runs",
   catalog: "dataIngestion.tabs.catalog",
   autoScan: "dataIngestion.tabs.autoScan",
   agent: "dataIngestion.tabs.agent",
@@ -69,13 +68,11 @@ export const dataIngestionRoutes: RouteObject[] = [
   },
   {
     path: "data-ingestion/runs",
-    handle: handle(pageHandles.runs),
-    element: page(<DataIngestionPage activeView="runs" />),
+    element: page(<Navigate replace to="/task-management?tab=data-ingestion" />),
   },
   {
     path: "data-ingestion/runs/:runId",
-    handle: handle(pageHandles.runs),
-    element: page(<DataIngestionPage activeView="runs" />),
+    element: page(<Navigate replace to="/task-management?tab=data-ingestion" />),
   },
   {
     path: "data-ingestion/catalog",

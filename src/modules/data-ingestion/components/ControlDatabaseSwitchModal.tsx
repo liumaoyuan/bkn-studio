@@ -72,17 +72,31 @@ export function ControlDatabaseSwitchModal({
     const values = await form.validateFields();
     setSwitching(true);
     try {
+      const databaseUrl = buildMysqlConnectionUrl({
+        databaseName: values.database_name,
+        host: values.host,
+        password: values.password || "",
+        port: values.port,
+        username: values.username,
+      });
       const nextStatus = await dataIngestionService.configureControlDatabase({
-        database_url: buildMysqlConnectionUrl({
-          databaseName: values.database_name,
-          host: values.host,
-          password: values.password || "",
-          port: values.port,
-          username: values.username,
-        }),
+        database_url: databaseUrl,
         create_database: values.create_database,
         bootstrap_database_url: values.bootstrap_database_url?.trim() || undefined,
       });
+      try {
+        const spaces = await dataIngestionService.listDataSpaces();
+        const defaultSpace = spaces.find((space) => space.is_default) ?? spaces[0];
+        if (defaultSpace) {
+          await dataIngestionService.syncDataSpaceCatalog(defaultSpace.id);
+        }
+      } catch (error) {
+        message.warning(
+          t("dataIngestion.controlDatabase.catalogSyncWarning", {
+            message: extractRequestErrorMessage(error),
+          }),
+        );
+      }
       message.success(t("dataIngestion.controlDatabase.switched"));
       await onConfigured(nextStatus);
       onCancel();

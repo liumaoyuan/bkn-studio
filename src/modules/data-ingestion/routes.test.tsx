@@ -12,7 +12,7 @@ import { dataIngestionRoutes } from "@/modules/data-ingestion/routes";
 import { dataIngestionModuleManifest } from "@/modules/data-ingestion/module.manifest";
 
 describe("data-ingestion module registration", () => {
-  it("registers all workbench views and run details", () => {
+  it("registers ingestion workbench views without a separate run list", () => {
     expect(dataIngestionRoutes.map((route) => route.path)).toEqual([
       "data-ingestion",
       "data-ingestion/import",
@@ -24,6 +24,7 @@ describe("data-ingestion module registration", () => {
       "data-ingestion/auto-scan",
       "data-ingestion/agent",
     ]);
+    expect(dataIngestionModuleManifest.scenes[0].inputs).not.toContain("runId?");
   });
 
   it("adds one navigation entry under the data group", () => {

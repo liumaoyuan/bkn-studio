@@ -41,6 +41,10 @@ vi.mock("@/modules/data-catalog/scenes/IndexBuildListScene", () => ({
   IndexBuildListScene: () => <div>index build panel</div>,
 }));
 
+vi.mock("../components/IngestionRunTaskPanel", () => ({
+  IngestionRunTaskPanel: () => <div>ingestion run panel</div>,
+}));
+
 vi.mock("./TaskManagementTaskPanels", () => ({
   DiscoverTaskListPanel: () => <div>discover panel</div>,
   SemanticUnderstandingTaskListPanel: () => <div>semantic panel</div>,
@@ -54,6 +58,17 @@ function LocationState() {
 }
 
 describe("TaskManagementScene", () => {
+  it("includes ingestion runs in unified task management", () => {
+    render(
+      <MemoryRouter initialEntries={["/task-management?tab=data-ingestion"]}>
+        <TaskManagementScene />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId("active-tab").textContent).toBe("data-ingestion");
+    expect(screen.getByText("ingestion run panel")).toBeTruthy();
+  });
+
   it("restores the active tab from the URL and updates it when switching tabs", () => {
     render(
       <MemoryRouter initialEntries={["/task-management?tab=semantic-understanding"]}>
