@@ -6,6 +6,7 @@
  */
 
 import {
+  ApartmentOutlined,
   CloudUploadOutlined,
   DatabaseOutlined,
   DownloadOutlined,
@@ -34,6 +35,7 @@ import {
   Progress,
   Row,
   Select,
+  Segmented,
   Space,
   Statistic,
   Steps,
@@ -43,6 +45,7 @@ import {
   Tag,
   Typography,
   Upload,
+  Spin,
   type TabsProps,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
@@ -56,6 +59,7 @@ import { extractRequestErrorMessage } from "@/framework/request/error-message";
 import { ControlDatabaseSetup } from "@/modules/data-ingestion/components/ControlDatabaseSetup";
 import { ControlDatabaseSwitchModal } from "@/modules/data-ingestion/components/ControlDatabaseSwitchModal";
 import { DatabaseConnectionPicker } from "@/modules/data-ingestion/components/DatabaseConnectionPicker";
+import { DatasetProvenanceDrawer } from "@/modules/data-ingestion/components/DatasetProvenanceDrawer";
 import { IngestionAgentPanel } from "@/modules/data-ingestion/components/IngestionAgentPanel";
 import {
   PipelineComposerModal,
@@ -68,6 +72,7 @@ import {
   DEFAULT_MYSQL_PORT,
   normalizeMysqlHost,
 } from "@/modules/data-ingestion/lib/mysql-connection-url";
+import { classifySourceConnectionError } from "@/modules/data-ingestion/lib/source-connection-error";
 import {
   dataIngestionService,
   setDataIngestionSpace,
@@ -76,13 +81,17 @@ import type {
   DataIngestionAutoScanJob,
   DataIngestionAgentManifest,
   DataIngestionControlDatabaseStatus,
+  DataIngestionDatabaseCatalog,
   DataIngestionDataSource,
   DataIngestionDataset,
+  DataIngestionDatasetContract,
+  DataIngestionDatasetFieldSchema,
   DataIngestionDatasetRecord,
   DataIngestionInspection,
   DataIngestionOverview,
   DataIngestionPipelineRunResult,
   DataIngestionPipelineTemplate,
+  DataIngestionQualityCheck,
   DataIngestionRun,
   DataIngestionRunListItem,
   DataIngestionSpace,
@@ -103,6 +112,20 @@ interface DataSpaceFormValues {
   password: string;
   port: number;
   username: string;
+}
+
+type ImportMode = "files" | "source";
+
+type UploadQueueStatus =
+  "inspecting" | "ready" | "error" | "queued" | "running" | "success" | "failed";
+
+interface UploadQueueItem {
+  id: string;
+  file: File;
+  status: UploadQueueStatus;
+  inspection?: DataIngestionInspection;
+  error?: string;
+  run?: DataIngestionRun;
 }
 
 function formatBytes(value: number) {
@@ -126,6 +149,51 @@ function displayValue(value: unknown) {
     return String(value);
   }
   return JSON.stringify(value);
+}
+
+interface DocumentTablePreview {
+  column_count: number;
+  index: number;
+  page?: number;
+  row_count: number;
+  rows: string[][];
+}
+
+function documentTablePreviews(metadata: Record<string, unknown>) {
+  if (!Array.isArray(metadata.tables)) {
+    return [];
+  }
+  return metadata.tables.flatMap((value, index): DocumentTablePreview[] => {
+    if (!value || typeof value !== "object" || !("rows" in value)) {
+      return [];
+    }
+    const table = value as Record<string, unknown>;
+    if (!Array.isArray(table.rows)) {
+      return [];
+    }
+    const rows = table.rows
+      .filter((row): row is unknown[] => Array.isArray(row))
+      .map((row) => row.map((cell) => displayValue(cell)));
+    return [
+      {
+        column_count:
+          typeof table.column_count === "number"
+            ? table.column_count
+            : Math.max(...rows.map((row) => row.length), 0),
+        index: typeof table.index === "number" ? table.index : index + 1,
+        page: typeof table.page === "number" ? table.page : undefined,
+        row_count: typeof table.row_count === "number" ? table.row_count : rows.length,
+        rows,
+      },
+    ];
+  });
+}
+
+function documentTableRows(table: DocumentTablePreview) {
+  return table.rows.slice(1).map((row, rowIndex) => ({
+    key: `${table.index}-${rowIndex}`,
+    ...Object.fromEntries(row.map((value, columnIndex) => [String(columnIndex), value])),
+  }));
 }
 
 function stageStatus(stage: DataIngestionStage) {
@@ -181,6 +249,37 @@ function emptyScanForm() {
     cron_expression: "",
     timezone: "Asia/Shanghai",
     enabled: true,
+  };
+}
+
+function emptySourceForm() {
+  return {
+    body: "{}",
+    headers: "{}",
+    name: "",
+    source_type: "upload",
+    method: "GET",
+    pagination_type: "none",
+    page_param: "page",
+    page_size: "100",
+    max_pages: "10",
+    next_url_path: "",
+    host: "",
+    port: "",
+    path: "",
+    username: "",
+    password: "",
+    database: "",
+    private_key: "",
+    query: "",
+    query_mode: "table" as "table" | "custom",
+    sync_mode: "full" as "full" | "incremental",
+    table_name: "",
+    schema_name: "",
+    initial_cursor: "",
+    record_path: "",
+    use_tls: false,
+    watermark_column: "",
   };
 }
 
@@ -372,6 +471,17 @@ function RunDetailCard({
         <Descriptions.Item label="Template">
           <Text code>{run.template_code}</Text>
         </Descriptions.Item>
+        <Descriptions.Item label={t("dataIngestion.contract.source")}>
+          <Text ellipsis={{ tooltip: run.source_object }}>
+            {run.source_object || run.original_name}
+          </Text>
+        </Descriptions.Item>
+        <Descriptions.Item label={t("dataIngestion.runs.cursorBefore")}>
+          <Text code>{run.incremental_cursor_before || "-"}</Text>
+        </Descriptions.Item>
+        <Descriptions.Item label={t("dataIngestion.runs.cursorAfter")}>
+          <Text code>{run.incremental_cursor_after || "-"}</Text>
+        </Descriptions.Item>
       </Descriptions>
       <Progress
         percent={progress}
@@ -403,6 +513,8 @@ export function DataIngestionWorkbenchScene({
   const runtimeConfig = useRuntimeConfig();
   const [searchParams] = useSearchParams();
   const requestedDatasetId = searchParams.get("dataset")?.trim() || "";
+  const requestedDrawer = searchParams.get("drawer")?.trim() || "";
+  const requestedSpaceId = searchParams.get("space")?.trim() || "";
   const can = useCallback(
     (permission: string) => runtimeConfig.currentUser.permissions.includes(permission),
     [runtimeConfig.currentUser.permissions],
@@ -430,29 +542,10 @@ export function DataIngestionWorkbenchScene({
 
   const [sourceModalOpen, setSourceModalOpen] = useState(false);
   const [editingSourceId, setEditingSourceId] = useState<string | null>(null);
-  const [sourceForm, setSourceForm] = useState({
-    body: "{}",
-    headers: "{}",
-    name: "",
-    source_type: "upload",
-    method: "GET",
-    pagination_type: "none",
-    page_param: "page",
-    page_size: "100",
-    max_pages: "10",
-    next_url_path: "",
-    host: "",
-    port: "",
-    path: "",
-    username: "",
-    password: "",
-    database: "",
-    private_key: "",
-    query: "",
-    record_path: "",
-    use_tls: false,
-    watermark_column: "",
-  });
+  const [sourceForm, setSourceForm] = useState(emptySourceForm);
+  const [sourceCatalog, setSourceCatalog] = useState<DataIngestionDatabaseCatalog | null>(null);
+  const [sourceCatalogLoading, setSourceCatalogLoading] = useState(false);
+  const [sourceCatalogError, setSourceCatalogError] = useState("");
 
   const [datasetModalOpen, setDatasetModalOpen] = useState(false);
   const [editingDatasetId, setEditingDatasetId] = useState<string | null>(null);
@@ -464,9 +557,14 @@ export function DataIngestionWorkbenchScene({
     upsert_keys: "",
   });
 
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [inspection, setInspection] = useState<DataIngestionInspection | null>(null);
+  const [importMode, setImportMode] = useState<ImportMode>("files");
+  const [uploadItems, setUploadItems] = useState<UploadQueueItem[]>([]);
+  const [activeUploadId, setActiveUploadId] = useState("");
   const [activeSheetIndex, setActiveSheetIndex] = useState(0);
+  const [browserPreviewUrl, setBrowserPreviewUrl] = useState("");
+  const uploadSequenceRef = useRef(0);
+  const uploadKeysRef = useRef(new Set<string>());
+  const inspectedUploadCountRef = useRef(0);
   const [selectedDatasetId, setSelectedDatasetId] = useState(requestedDatasetId);
   useEffect(() => {
     if (requestedDatasetId) {
@@ -475,9 +573,11 @@ export function DataIngestionWorkbenchScene({
   }, [requestedDatasetId]);
   const [selectedTemplateCode, setSelectedTemplateCode] = useState("tabular_standard");
   const [selectedSourceId, setSelectedSourceId] = useState("");
-  const [inspecting, setInspecting] = useState(false);
+  const [sourceIngestionSourceId, setSourceIngestionSourceId] = useState("");
   const [ingesting, setIngesting] = useState(false);
-  const [createdRun, setCreatedRun] = useState<DataIngestionRun | null>(null);
+  const [sourceIngesting, setSourceIngesting] = useState(false);
+  const [sourceIngestionRun, setSourceIngestionRun] = useState<DataIngestionRun | null>(null);
+  const [sourceIngestionError, setSourceIngestionError] = useState("");
   const [runDetailOpen, setRunDetailOpen] = useState(false);
   const [drawerRun, setDrawerRun] = useState<DataIngestionRun | null>(null);
   const [pipelineDrawer, setPipelineDrawer] = useState<DataIngestionPipelineTemplate | null>(null);
@@ -494,12 +594,11 @@ export function DataIngestionWorkbenchScene({
     null,
   );
   const [agentManifest, setAgentManifest] = useState<DataIngestionAgentManifest | null>(null);
-  const pollerRef = useRef<number | null>(null);
-  const pollerInFlightRef = useRef(false);
-  const pollerErrorNotifiedRef = useRef(false);
   const overviewPollInFlightRef = useRef(false);
   const drawerPollInFlightRef = useRef(false);
   const scanJobsPollInFlightRef = useRef(false);
+  const qualityCheckPollInFlightRef = useRef(false);
+  const autoOpenedDrawerRef = useRef("");
 
   const [selectedCatalogDatasetId, setSelectedCatalogDatasetId] = useState("");
   const [datasetSearch, setDatasetSearch] = useState("");
@@ -508,11 +607,45 @@ export function DataIngestionWorkbenchScene({
   const [recordsTotal, setRecordsTotal] = useState(0);
   const [recordsPage, setRecordsPage] = useState(1);
   const [recordsLoading, setRecordsLoading] = useState(false);
+  const [contractDataset, setContractDataset] = useState<DataIngestionDataset | null>(null);
+  const [datasetContract, setDatasetContract] = useState<DataIngestionDatasetContract | null>(null);
+  const [contractLoading, setContractLoading] = useState(false);
+  const [contractError, setContractError] = useState("");
+  const [publishingDataset, setPublishingDataset] = useState(false);
+  const [fullQualityCheck, setFullQualityCheck] = useState<DataIngestionQualityCheck | null>(null);
+  const [startingQualityCheck, setStartingQualityCheck] = useState(false);
+  const [backfillingProvenance, setBackfillingProvenance] = useState(false);
+  const [provenanceOpen, setProvenanceOpen] = useState(false);
+  const [provenanceRecord, setProvenanceRecord] = useState<DataIngestionDatasetRecord | null>(null);
 
   const [scanModalOpen, setScanModalOpen] = useState(false);
   const [editingScanId, setEditingScanId] = useState<string | null>(null);
   const [scanForm, setScanForm] = useState(emptyScanForm);
 
+  const activeUploadItem = uploadItems.find((item) => item.id === activeUploadId);
+  const activeUploadFile = activeUploadItem?.file;
+  const inspection = activeUploadItem?.inspection ?? null;
+  const documentTables = useMemo(
+    () => (inspection ? documentTablePreviews(inspection.metadata) : []),
+    [inspection],
+  );
+  const inspecting = uploadItems.some((item) => item.status === "inspecting");
+  const ingestionSources = sources.filter((source) => source.source_type !== "upload");
+  const selectedIngestionSource = ingestionSources.find(
+    (source) => source.id === sourceIngestionSourceId,
+  );
+  const selectedTemplate = templates.find((template) => template.code === selectedTemplateCode);
+  const allUploadsReady =
+    uploadItems.length > 0 &&
+    uploadItems.every(
+      (item) => Boolean(item.inspection) && !["inspecting", "error"].includes(item.status),
+    );
+  const allUploadsSupportedByTemplate =
+    Boolean(selectedTemplate) &&
+    uploadItems.every(
+      (item) =>
+        item.inspection && selectedTemplate?.supported_types.includes(item.inspection.file_type),
+    );
   const activeSheet =
     inspection?.sheets[activeSheetIndex] ??
     (inspection
@@ -532,7 +665,6 @@ export function DataIngestionWorkbenchScene({
     (dataset) => dataset.id === selectedCatalogDatasetId,
   );
   const activeSpace = spaces.find((space) => space.id === activeSpaceId);
-  const activeRun = createdRun;
   const hasActiveScanJobs = scanJobs.some((job) => ["queued", "running"].includes(job.status));
   const visibleDatasets = useMemo(() => {
     const keyword = datasetSearch.trim().toLowerCase();
@@ -543,6 +675,23 @@ export function DataIngestionWorkbenchScene({
       `${dataset.name} ${dataset.description}`.toLowerCase().includes(keyword),
     );
   }, [datasetSearch, datasets]);
+
+  useEffect(() => {
+    if (
+      !activeUploadFile ||
+      !(
+        activeUploadFile.type.startsWith("image/") ||
+        activeUploadFile.type.startsWith("video/") ||
+        activeUploadFile.type === "application/pdf"
+      )
+    ) {
+      setBrowserPreviewUrl("");
+      return;
+    }
+    const url = URL.createObjectURL(activeUploadFile);
+    setBrowserPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [activeUploadFile]);
 
   const loadCore = useCallback(
     async (silent = false) => {
@@ -578,6 +727,14 @@ export function DataIngestionWorkbenchScene({
               ? current
               : "") ||
             nextSources.find((source) => source.source_type === "upload")?.id ||
+            "",
+        );
+        setSourceIngestionSourceId(
+          (current) =>
+            (nextSources.some((source) => source.id === current && source.source_type !== "upload")
+              ? current
+              : "") ||
+            nextSources.find((source) => source.source_type !== "upload")?.id ||
             "",
         );
       } catch (error) {
@@ -656,6 +813,7 @@ export function DataIngestionWorkbenchScene({
       const nextSpaces = await dataIngestionService.listDataSpaces();
       const storedSpaceId = window.localStorage.getItem("data-ingestion.active-space");
       const selected =
+        nextSpaces.find((space) => space.id === requestedSpaceId) ??
         nextSpaces.find((space) => space.id === storedSpaceId) ??
         nextSpaces.find((space) => space.is_default) ??
         nextSpaces[0];
@@ -670,7 +828,7 @@ export function DataIngestionWorkbenchScene({
       setSpacesReady(true);
       throw error;
     }
-  }, []);
+  }, [requestedSpaceId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -736,14 +894,51 @@ export function DataIngestionWorkbenchScene({
     }
   }, [activeSpaceId, activeView, loadRecords, selectedCatalogDatasetId, spacesReady]);
 
-  useEffect(
-    () => () => {
-      if (pollerRef.current) {
-        window.clearInterval(pollerRef.current);
-      }
-    },
-    [],
-  );
+  useEffect(() => {
+    if (
+      activeView !== "catalog" ||
+      datasets.length === 0 ||
+      !requestedDatasetId ||
+      !requestedDrawer
+    ) {
+      return;
+    }
+    const dataset = datasets.find((item) => item.id === requestedDatasetId);
+    if (!dataset) {
+      return;
+    }
+    const requestKey = `${requestedDatasetId}:${requestedDrawer}`;
+    if (autoOpenedDrawerRef.current === requestKey) {
+      return;
+    }
+    autoOpenedDrawerRef.current = requestKey;
+    setSelectedCatalogDatasetId(dataset.id);
+    setRecordsPage(1);
+    if (requestedDrawer === "contract") {
+      setContractDataset(dataset);
+      setDatasetContract(null);
+      setContractError("");
+      setContractLoading(true);
+      void Promise.all([
+        dataIngestionService.getDatasetContract(dataset.id),
+        dataIngestionService.getLatestFullDatasetQualityCheck(dataset.id),
+      ])
+        .then(([contract, latestCheck]) => {
+          setDatasetContract(contract);
+          setFullQualityCheck(latestCheck);
+        })
+        .catch((error) => {
+          setContractError(extractRequestErrorMessage(error));
+        })
+        .finally(() => {
+          setContractLoading(false);
+        });
+    }
+    if (requestedDrawer === "provenance") {
+      setProvenanceRecord(null);
+      setProvenanceOpen(true);
+    }
+  }, [activeView, datasets, requestedDatasetId, requestedDrawer]);
 
   useEffect(() => {
     if (activeView !== "overview" || !overview?.active_runs) {
@@ -797,9 +992,46 @@ export function DataIngestionWorkbenchScene({
     };
   }, [drawerRun, runDetailOpen]);
 
+  useEffect(() => {
+    if (
+      !contractDataset ||
+      !fullQualityCheck ||
+      !["queued", "running"].includes(fullQualityCheck.status)
+    ) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      if (qualityCheckPollInFlightRef.current) {
+        return;
+      }
+      qualityCheckPollInFlightRef.current = true;
+      void dataIngestionService
+        .getLatestFullDatasetQualityCheck(contractDataset.id)
+        .then(setFullQualityCheck)
+        .catch(() => {
+          // Keep the current status and retry on the next interval.
+        })
+        .finally(() => {
+          qualityCheckPollInFlightRef.current = false;
+        });
+    }, 2_000);
+    return () => window.clearInterval(timer);
+  }, [contractDataset, fullQualityCheck]);
+
   async function saveSource() {
     if (!sourceForm.name.trim()) {
       return;
+    }
+    const sourceIsDatabase = ["mysql", "postgres"].includes(sourceForm.source_type);
+    if (sourceIsDatabase && sourceForm.query_mode === "table") {
+      if (!sourceForm.table_name) {
+        message.error(t("dataIngestion.sources.tableNameRequired"));
+        return;
+      }
+      if (sourceForm.sync_mode === "incremental" && !sourceForm.watermark_column) {
+        message.error(t("dataIngestion.sources.changeFieldRequired"));
+        return;
+      }
     }
     try {
       let headers: Record<string, string> = {};
@@ -837,11 +1069,37 @@ export function DataIngestionWorkbenchScene({
           password: sourceForm.password || undefined,
           database: sourceForm.database || undefined,
           private_key: sourceForm.private_key || undefined,
-          query: sourceForm.query || undefined,
+          query_mode: sourceIsDatabase ? sourceForm.query_mode : undefined,
+          sync_mode:
+            sourceIsDatabase && sourceForm.query_mode === "table"
+              ? sourceForm.sync_mode
+              : undefined,
+          table_name:
+            sourceIsDatabase && sourceForm.query_mode === "table"
+              ? sourceForm.table_name || undefined
+              : undefined,
+          schema_name:
+            sourceIsDatabase && sourceForm.query_mode === "table"
+              ? sourceForm.schema_name || undefined
+              : undefined,
+          initial_cursor:
+            sourceIsDatabase &&
+            sourceForm.query_mode === "table" &&
+            sourceForm.sync_mode === "incremental"
+              ? sourceForm.initial_cursor || "1970-01-01T00:00:00"
+              : undefined,
+          query:
+            !sourceIsDatabase || sourceForm.query_mode === "custom"
+              ? sourceForm.query || undefined
+              : undefined,
           record_path:
             sourceForm.source_type === "api" ? sourceForm.record_path || undefined : undefined,
           use_tls: sourceForm.source_type === "ftp" ? sourceForm.use_tls : undefined,
-          watermark_column: sourceForm.watermark_column || undefined,
+          watermark_column:
+            sourceIsDatabase &&
+            (sourceForm.query_mode === "custom" || sourceForm.sync_mode === "incremental")
+              ? sourceForm.watermark_column || undefined
+              : undefined,
         },
       };
       if (editingSourceId) {
@@ -851,29 +1109,9 @@ export function DataIngestionWorkbenchScene({
       }
       setSourceModalOpen(false);
       setEditingSourceId(null);
-      setSourceForm({
-        body: "{}",
-        headers: "{}",
-        name: "",
-        source_type: "upload",
-        method: "GET",
-        pagination_type: "none",
-        page_param: "page",
-        page_size: "100",
-        max_pages: "10",
-        next_url_path: "",
-        host: "",
-        port: "",
-        path: "",
-        username: "",
-        password: "",
-        database: "",
-        private_key: "",
-        query: "",
-        record_path: "",
-        use_tls: false,
-        watermark_column: "",
-      });
+      setSourceForm(emptySourceForm());
+      setSourceCatalog(null);
+      setSourceCatalogError("");
       message.success(t("dataIngestion.sources.saved"));
       await loadCore(true);
     } catch (error) {
@@ -882,6 +1120,143 @@ export function DataIngestionWorkbenchScene({
           message: extractRequestErrorMessage(error),
         }),
       );
+    }
+  }
+
+  async function loadDatabaseCatalog(tableName = "") {
+    setSourceCatalogLoading(true);
+    setSourceCatalogError("");
+    try {
+      const catalog = await dataIngestionService.inspectSourceDatabase({
+        source_id: editingSourceId ?? undefined,
+        source_type: sourceForm.source_type,
+        table_name: tableName || undefined,
+        config: {
+          host: sourceForm.host || undefined,
+          port: sourceForm.port ? Number(sourceForm.port) : undefined,
+          database: sourceForm.database || undefined,
+          username: sourceForm.username || undefined,
+          password: sourceForm.password || undefined,
+          schema_name: sourceForm.schema_name || undefined,
+        },
+      });
+      setSourceCatalog(catalog);
+      if (tableName) {
+        setSourceForm((current) => ({
+          ...current,
+          table_name: catalog.table_name,
+          schema_name: catalog.schema_name,
+          sync_mode: catalog.recommended_sync_mode,
+          watermark_column: catalog.recommended_watermark,
+          initial_cursor: catalog.recommended_initial_cursor,
+        }));
+      }
+    } catch (error) {
+      const detail = extractRequestErrorMessage(error);
+      const errorKind = classifySourceConnectionError(detail);
+      const title = t(`dataIngestion.sources.connectionErrorTitles.${errorKind}`);
+      const hint = t(`dataIngestion.sources.connectionErrorHints.${errorKind}`);
+      setSourceCatalogError(detail);
+      message.error(
+        <div>
+          <div>{title}</div>
+          <div>{hint}</div>
+          <div>{detail}</div>
+        </div>,
+        10,
+      );
+    } finally {
+      setSourceCatalogLoading(false);
+    }
+  }
+
+  async function openDatasetContract(dataset: DataIngestionDataset) {
+    setContractDataset(dataset);
+    setDatasetContract(null);
+    setContractError("");
+    setContractLoading(true);
+    try {
+      const [contract, latestCheck] = await Promise.all([
+        dataIngestionService.getDatasetContract(dataset.id),
+        dataIngestionService.getLatestFullDatasetQualityCheck(dataset.id),
+      ]);
+      setDatasetContract(contract);
+      setFullQualityCheck(latestCheck);
+    } catch (error) {
+      setContractError(extractRequestErrorMessage(error));
+    } finally {
+      setContractLoading(false);
+    }
+  }
+
+  function openDatasetProvenance(record: DataIngestionDatasetRecord | null = null) {
+    if (!selectedCatalogDataset) {
+      return;
+    }
+    setProvenanceRecord(record);
+    setProvenanceOpen(true);
+  }
+
+  async function startFullQualityCheck() {
+    if (!contractDataset) {
+      return;
+    }
+    setStartingQualityCheck(true);
+    try {
+      setFullQualityCheck(
+        await dataIngestionService.startFullDatasetQualityCheck(contractDataset.id),
+      );
+    } catch (error) {
+      message.error(extractRequestErrorMessage(error));
+    } finally {
+      setStartingQualityCheck(false);
+    }
+  }
+
+  async function backfillProvenance() {
+    if (!contractDataset) {
+      return;
+    }
+    setBackfillingProvenance(true);
+    try {
+      const result = await dataIngestionService.backfillDatasetProvenance(contractDataset.id);
+      message.success(
+        t("dataIngestion.contract.provenanceBackfilled", {
+          count: result.updated_records,
+        }),
+      );
+    } catch (error) {
+      message.error(extractRequestErrorMessage(error));
+    } finally {
+      setBackfillingProvenance(false);
+    }
+  }
+
+  async function publishDatasetContract() {
+    if (!contractDataset) {
+      return;
+    }
+    setPublishingDataset(true);
+    try {
+      const publication = await dataIngestionService.publishDataset(contractDataset.id);
+      setDatasetContract((current) => (current ? { ...current, publication } : current));
+      message.success(t("dataIngestion.contract.published"));
+    } catch (error) {
+      message.error(extractRequestErrorMessage(error));
+      setDatasetContract((current) =>
+        current
+          ? {
+              ...current,
+              publication: {
+                ...current.publication,
+                status: "failed",
+                last_error: extractRequestErrorMessage(error),
+              },
+            }
+          : current,
+      );
+    } finally {
+      setPublishingDataset(false);
     }
   }
 
@@ -900,7 +1275,14 @@ export function DataIngestionWorkbenchScene({
     setSelectedDatasetId("");
     setSelectedCatalogDatasetId("");
     setSelectedSourceId("");
-    setCreatedRun(null);
+    setSourceIngestionSourceId("");
+    setSourceIngestionRun(null);
+    setSourceIngestionError("");
+    setUploadItems([]);
+    setActiveUploadId("");
+    setActiveSheetIndex(0);
+    uploadKeysRef.current.clear();
+    inspectedUploadCountRef.current = 0;
     setDrawerRun(null);
   }
 
@@ -961,7 +1343,14 @@ export function DataIngestionWorkbenchScene({
     setSelectedDatasetId("");
     setSelectedCatalogDatasetId("");
     setSelectedSourceId("");
-    setCreatedRun(null);
+    setSourceIngestionSourceId("");
+    setSourceIngestionRun(null);
+    setSourceIngestionError("");
+    setUploadItems([]);
+    setActiveUploadId("");
+    setActiveSheetIndex(0);
+    uploadKeysRef.current.clear();
+    inspectedUploadCountRef.current = 0;
     setDrawerRun(null);
     try {
       await loadDataSpaces();
@@ -980,7 +1369,16 @@ export function DataIngestionWorkbenchScene({
       message.success(t("dataIngestion.sources.passed"));
       await loadCore(true);
     } catch (error) {
-      message.error(extractRequestErrorMessage(error));
+      const detail = extractRequestErrorMessage(error);
+      const errorKind = classifySourceConnectionError(detail);
+      message.error(
+        <div>
+          <div>{t(`dataIngestion.sources.connectionErrorTitles.${errorKind}`)}</div>
+          <div>{t(`dataIngestion.sources.connectionErrorHints.${errorKind}`)}</div>
+          <div>{detail}</div>
+        </div>,
+        10,
+      );
     }
   }
 
@@ -995,14 +1393,8 @@ export function DataIngestionWorkbenchScene({
       method: typeof config.method === "string" ? config.method : "GET",
       pagination_type: typeof config.pagination_type === "string" ? config.pagination_type : "none",
       page_param: typeof config.page_param === "string" ? config.page_param : "page",
-      page_size:
-        config.page_size === undefined || config.page_size === null
-          ? "100"
-          : String(config.page_size),
-      max_pages:
-        config.max_pages === undefined || config.max_pages === null
-          ? "10"
-          : String(config.max_pages),
+      page_size: displayValue(config.page_size ?? "100"),
+      max_pages: displayValue(config.max_pages ?? "10"),
       next_url_path: typeof config.next_url_path === "string" ? config.next_url_path : "",
       host:
         source.source_type === "api"
@@ -1012,17 +1404,24 @@ export function DataIngestionWorkbenchScene({
           : typeof config.host === "string"
             ? config.host
             : "",
-      port: config.port === undefined || config.port === null ? "" : String(config.port),
+      port: config.port === undefined || config.port === null ? "" : displayValue(config.port),
       path: typeof config.path === "string" ? config.path : "",
       username: typeof config.username === "string" ? config.username : "",
       password: "",
       database: typeof config.database === "string" ? config.database : "",
       private_key: "",
+      query_mode: config.query_mode === "table" ? "table" : "custom",
+      sync_mode: config.sync_mode === "incremental" ? "incremental" : "full",
+      table_name: typeof config.table_name === "string" ? config.table_name : "",
+      schema_name: typeof config.schema_name === "string" ? config.schema_name : "",
+      initial_cursor: typeof config.initial_cursor === "string" ? config.initial_cursor : "",
       query: typeof config.query === "string" ? config.query : "",
       record_path: typeof config.record_path === "string" ? config.record_path : "",
       use_tls: config.use_tls === true,
       watermark_column: typeof config.watermark_column === "string" ? config.watermark_column : "",
     });
+    setSourceCatalog(null);
+    setSourceCatalogError("");
     setSourceModalOpen(true);
   }
 
@@ -1071,40 +1470,104 @@ export function DataIngestionWorkbenchScene({
     }
   }
 
-  async function inspectFile(file: File) {
-    setSelectedFile(file);
-    setCreatedRun(null);
-    setInspection(null);
-    setInspecting(true);
+  function updateUploadItem(id: string, update: Partial<UploadQueueItem>) {
+    setUploadItems((current) =>
+      current.map((item) => (item.id === id ? { ...item, ...update } : item)),
+    );
+  }
+
+  function queueUploadFiles(files: File[]) {
+    const nextItems = files
+      .filter((file) => {
+        const key = `${file.name}:${file.size}:${file.lastModified}`;
+        if (uploadKeysRef.current.has(key)) {
+          return false;
+        }
+        uploadKeysRef.current.add(key);
+        return true;
+      })
+      .map((file) => ({
+        id: `upload-${++uploadSequenceRef.current}`,
+        file,
+        status: "inspecting" as const,
+      }));
+    if (!nextItems.length) {
+      return;
+    }
+    setUploadItems((current) => [...current, ...nextItems]);
+    setActiveUploadId(nextItems[0].id);
+    setActiveSheetIndex(0);
+    nextItems.forEach((item) => void inspectUploadItem(item));
+  }
+
+  async function inspectUploadItem(item: UploadQueueItem) {
     try {
-      const next = await dataIngestionService.inspectUpload(file);
-      setInspection(next);
-      setSelectedTemplateCode(next.recommended_pipeline);
-      setActiveSheetIndex(
-        Math.max(
-          0,
-          next.sheets.findIndex((sheet) => sheet.is_active),
-        ),
-      );
-      const recommendedType = {
-        tabular_standard: "tabular",
-        document_standard: "document",
-        media_standard: "media",
-      }[next.recommended_pipeline];
-      const dataset = datasets.find((item) => item.data_type === recommendedType);
-      if (dataset) {
-        setSelectedDatasetId(dataset.id);
+      const inspectionResult = await dataIngestionService.inspectUpload(item.file);
+      updateUploadItem(item.id, {
+        error: "",
+        inspection: inspectionResult,
+        status: "ready",
+      });
+      if (activeUploadId === item.id || !activeUploadId) {
+        setActiveSheetIndex(
+          Math.max(
+            0,
+            inspectionResult.sheets.findIndex((sheet) => sheet.is_active),
+          ),
+        );
       }
+      if (inspectedUploadCountRef.current === 0) {
+        setSelectedTemplateCode(inspectionResult.recommended_pipeline);
+        const recommendedType = {
+          tabular_standard: "tabular",
+          document_standard: "document",
+          media_standard: "media",
+        }[inspectionResult.recommended_pipeline];
+        const dataset = datasets.find((candidate) => candidate.data_type === recommendedType);
+        if (dataset) {
+          setSelectedDatasetId(dataset.id);
+        }
+      }
+      inspectedUploadCountRef.current += 1;
     } catch (error) {
-      message.error(extractRequestErrorMessage(error));
-    } finally {
-      setInspecting(false);
+      const detail = extractRequestErrorMessage(error);
+      updateUploadItem(item.id, {
+        error: detail,
+        status: "error",
+      });
+      message.error(`${item.file.name}: ${detail}`, 8);
     }
   }
 
-  async function startIngestion() {
-    if (!selectedFile) {
+  function removeUploadItem(id: string) {
+    const item = uploadItems.find((candidate) => candidate.id === id);
+    if (item && !ingesting) {
+      uploadKeysRef.current.delete(`${item.file.name}:${item.file.size}:${item.file.lastModified}`);
+      setUploadItems((current) => current.filter((candidate) => candidate.id !== id));
+      if (activeUploadId === id) {
+        const remaining = uploadItems.filter((candidate) => candidate.id !== id);
+        setActiveUploadId(remaining[0]?.id ?? "");
+        setActiveSheetIndex(0);
+      }
+    }
+  }
+
+  async function waitForRunCompletion(runId: string) {
+    let current = await dataIngestionService.getRun(runId);
+    while (["queued", "running"].includes(current.status)) {
+      await new Promise((resolve) => window.setTimeout(resolve, 1000));
+      current = await dataIngestionService.getRun(runId);
+    }
+    return current;
+  }
+
+  async function startFileIngestion() {
+    if (!uploadItems.length) {
       message.warning(t("dataIngestion.errors.selectFile"));
+      return;
+    }
+    if (!allUploadsReady) {
+      message.warning(t("dataIngestion.import.waitForPreview"));
       return;
     }
     if (!selectedDatasetId) {
@@ -1115,80 +1578,134 @@ export function DataIngestionWorkbenchScene({
       message.warning(t("dataIngestion.errors.selectTemplate"));
       return;
     }
+    if (!allUploadsSupportedByTemplate) {
+      message.warning(t("dataIngestion.import.pipelineUnsupportedFiles"));
+      return;
+    }
     setIngesting(true);
+    let succeeded = 0;
+    let failed = 0;
     try {
-      const run = await dataIngestionService.createRun({
-        file: selectedFile,
-        datasetId: selectedDatasetId,
-        templateCode: selectedTemplateCode,
-        sourceId: selectedSourceId || undefined,
-      });
-      setCreatedRun(run);
-      if (pollerRef.current) {
-        window.clearInterval(pollerRef.current);
-      }
-      pollerInFlightRef.current = false;
-      pollerErrorNotifiedRef.current = false;
-      pollerRef.current = window.setInterval(() => {
-        if (pollerInFlightRef.current) {
-          return;
-        }
-        pollerInFlightRef.current = true;
-        void (async () => {
-          try {
-            const next = await dataIngestionService.getRun(run.id);
-            pollerErrorNotifiedRef.current = false;
-            setCreatedRun(next);
-            setOverview((current) =>
-              current
-                ? {
-                    ...current,
-                    recent_runs: current.recent_runs.map((item) =>
-                      item.id === next.id ? next : item,
-                    ),
-                  }
-                : current,
-            );
-            setDrawerRun((current) => (current?.id === next.id ? next : current));
-            if (!["queued", "running"].includes(next.status)) {
-              if (pollerRef.current) {
-                window.clearInterval(pollerRef.current);
-                pollerRef.current = null;
-              }
-              if (next.status === "success") {
-                message.success(
-                  t("dataIngestion.import.saved", {
-                    duplicates: next.duplicate_count,
-                    inserted: next.inserted_count,
-                    updated: next.updated_count,
-                  }),
-                );
-                if (activeSpaceId) {
-                  void dataIngestionService.syncDataSpaceCatalog(activeSpaceId);
-                }
-              } else {
-                message.error(
-                  t("dataIngestion.import.failedDetail", {
-                    message: next.error_message || t("dataIngestion.import.failed"),
-                  }),
-                );
-              }
-              await loadCore(true);
-            }
-          } catch (error) {
-            if (!pollerErrorNotifiedRef.current) {
-              pollerErrorNotifiedRef.current = true;
-              message.error(extractRequestErrorMessage(error));
-            }
-          } finally {
-            pollerInFlightRef.current = false;
+      for (const item of uploadItems) {
+        updateUploadItem(item.id, { error: "", run: undefined, status: "queued" });
+        try {
+          const queuedRun = await dataIngestionService.createRun({
+            datasetId: selectedDatasetId,
+            file: item.file,
+            sourceId: selectedSourceId || undefined,
+            templateCode: selectedTemplateCode,
+          });
+          updateUploadItem(item.id, {
+            run: queuedRun,
+            status: queuedRun.status as UploadQueueStatus,
+          });
+          const completedRun = await waitForRunCompletion(queuedRun.id);
+          updateUploadItem(item.id, {
+            run: completedRun,
+            status: completedRun.status === "success" ? "success" : "failed",
+          });
+          if (completedRun.status === "success") {
+            succeeded += 1;
+          } else {
+            failed += 1;
           }
-        })();
-      }, 1000);
-    } catch (error) {
-      message.error(extractRequestErrorMessage(error));
+        } catch (error) {
+          failed += 1;
+          updateUploadItem(item.id, {
+            error: extractRequestErrorMessage(error),
+            status: "failed",
+          });
+        }
+      }
+      if (succeeded > 0 && activeSpaceId) {
+        void dataIngestionService.publishDataset(selectedDatasetId).catch(() => {
+          // Ingestion already succeeded; publication can be retried from the dataset drawer.
+        });
+      }
+      if (failed === 0) {
+        message.success(t("dataIngestion.import.batchSucceeded", { count: succeeded }));
+      } else {
+        message.warning(
+          t("dataIngestion.import.batchPartial", {
+            failed,
+            succeeded,
+          }),
+        );
+      }
+      await loadCore(true);
     } finally {
       setIngesting(false);
+    }
+  }
+
+  async function startSourceIngestion() {
+    if (!selectedIngestionSource) {
+      message.warning(t("dataIngestion.import.selectSource"));
+      return;
+    }
+    if (!selectedDatasetId) {
+      message.warning(t("dataIngestion.errors.selectDataset"));
+      return;
+    }
+    if (!selectedTemplateCode) {
+      message.warning(t("dataIngestion.errors.selectTemplate"));
+      return;
+    }
+    setSourceIngesting(true);
+    setSourceIngestionRun(null);
+    setSourceIngestionError("");
+    try {
+      const result = await dataIngestionService.runSourceIngestion({
+        datasetId: selectedDatasetId,
+        name: t("dataIngestion.import.sourceRunName", {
+          source: selectedIngestionSource.name,
+        }),
+        path:
+          typeof selectedIngestionSource.config.path === "string"
+            ? selectedIngestionSource.config.path
+            : "",
+        scanType: scanTypeForSource(selectedIngestionSource),
+        sourceId: selectedIngestionSource.id,
+        templateCode: selectedTemplateCode,
+      });
+      setSourceIngestionRun(result.run);
+      if (result.job.last_error) {
+        setSourceIngestionError(result.job.last_error);
+        message.error(
+          t("dataIngestion.import.failedDetail", {
+            message: result.job.last_error,
+          }),
+          8,
+        );
+      } else if (!result.run) {
+        message.warning(t("dataIngestion.import.noSourceData"));
+      } else if (result.run.status === "success") {
+        message.success(
+          t("dataIngestion.import.saved", {
+            duplicates: result.run.duplicate_count,
+            inserted: result.run.inserted_count,
+            updated: result.run.updated_count,
+          }),
+        );
+        void dataIngestionService.publishDataset(selectedDatasetId).catch(() => {
+          // Ingestion already succeeded; publication can be retried from the dataset drawer.
+        });
+      } else {
+        setSourceIngestionError(result.run.error_message || t("dataIngestion.import.failed"));
+        message.error(
+          t("dataIngestion.import.failedDetail", {
+            message: result.run.error_message || t("dataIngestion.import.failed"),
+          }),
+          8,
+        );
+      }
+      await loadCore(true);
+    } catch (error) {
+      const detail = extractRequestErrorMessage(error);
+      setSourceIngestionError(detail);
+      message.error(detail, 8);
+    } finally {
+      setSourceIngesting(false);
     }
   }
 
@@ -1614,6 +2131,7 @@ export function DataIngestionWorkbenchScene({
           <Button
             onClick={() => {
               setSelectedCatalogDatasetId(item.id);
+              setProvenanceRecord(null);
               setRecordsPage(1);
               void loadRecords(item.id, 1);
             }}
@@ -1622,11 +2140,29 @@ export function DataIngestionWorkbenchScene({
             {t("dataIngestion.actions.open")}
           </Button>
           <Button
+            icon={<ApartmentOutlined />}
+            onClick={() => {
+              setSelectedCatalogDatasetId(item.id);
+              setProvenanceRecord(null);
+              setProvenanceOpen(true);
+            }}
+            type="link"
+          >
+            {t("dataIngestion.provenance.title")}
+          </Button>
+          <Button
             disabled={!can("data_ingestion:modify")}
             onClick={() => openDatasetEditor(item)}
             type="link"
           >
             {t("dataIngestion.agent.edit")}
+          </Button>
+          <Button
+            icon={<FileTextOutlined />}
+            onClick={() => void openDatasetContract(item)}
+            type="link"
+          >
+            {t("dataIngestion.contract.title")}
           </Button>
           {onOpenCatalogResource ? (
             <>
@@ -1681,6 +2217,25 @@ export function DataIngestionWorkbenchScene({
         key: "dataType",
         width: 100,
       },
+      {
+        title: t("dataIngestion.contract.stableRecordId"),
+        dataIndex: "stable_record_id",
+        key: "stableRecordId",
+        render: (value: string) => (
+          <Text code title={value}>
+            {value?.slice(0, 12) || "-"}
+          </Text>
+        ),
+        width: 150,
+      },
+      {
+        title: t("dataIngestion.contract.source"),
+        key: "source",
+        render: (_: unknown, item: DataIngestionDatasetRecord) => (
+          <Text title={JSON.stringify(item.source_locator ?? {})}>{item.source_object || "-"}</Text>
+        ),
+        width: 180,
+      },
       ...Array.from(keys).map((key) => ({
         title: key,
         key,
@@ -1703,8 +2258,68 @@ export function DataIngestionWorkbenchScene({
         render: formatTime,
         width: 170,
       },
+      {
+        title: t("dataIngestion.provenance.action"),
+        key: "provenance",
+        fixed: "right",
+        width: 110,
+        render: (_: unknown, item: DataIngestionDatasetRecord) => (
+          <Button
+            onClick={() => {
+              setProvenanceRecord(item);
+              setProvenanceOpen(true);
+            }}
+            type="link"
+          >
+            {t("dataIngestion.provenance.viewDetail")}
+          </Button>
+        ),
+      },
     ];
   }, [records, t]);
+
+  const contractFieldColumns = useMemo<ColumnsType<DataIngestionDatasetFieldSchema>>(
+    () => [
+      {
+        title: t("dataIngestion.contract.field"),
+        dataIndex: "name",
+        key: "name",
+        render: (value: string, item) => (
+          <Space size={4}>
+            <Text strong>{value}</Text>
+            {item.primary_key ? (
+              <Tag color="blue">{t("dataIngestion.contract.primaryKey")}</Tag>
+            ) : null}
+          </Space>
+        ),
+      },
+      {
+        title: t("dataIngestion.contract.type"),
+        dataIndex: "data_type",
+        key: "type",
+      },
+      {
+        title: t("dataIngestion.contract.nullable"),
+        dataIndex: "nullable",
+        key: "nullable",
+        render: (value: boolean) =>
+          value ? t("dataIngestion.contract.yes") : t("dataIngestion.contract.no"),
+      },
+      {
+        title: t("dataIngestion.contract.completeness"),
+        dataIndex: "completeness",
+        key: "completeness",
+        render: (value: number) => `${Math.round(value * 1000) / 10}%`,
+      },
+      {
+        title: t("dataIngestion.contract.samples"),
+        dataIndex: "sample_values",
+        key: "samples",
+        render: (values: unknown[]) => values.map(displayValue).join(", ") || "-",
+      },
+    ],
+    [t],
+  );
 
   const scanColumns: ColumnsType<DataIngestionAutoScanJob> = [
     {
@@ -1818,6 +2433,12 @@ export function DataIngestionWorkbenchScene({
       width: 150,
     },
     {
+      title: t("dataIngestion.pipelines.stepDescription"),
+      dataIndex: "description",
+      key: "description",
+      width: 320,
+    },
+    {
       title: t("dataIngestion.pipelines.stepKind"),
       dataIndex: "kind",
       key: "kind",
@@ -1870,6 +2491,7 @@ export function DataIngestionWorkbenchScene({
     { key: "import", label: t("dataIngestion.tabs.import") },
     { key: "pipelines", label: t("dataIngestion.tabs.pipelines") },
     { key: "sources", label: t("dataIngestion.tabs.sources") },
+    { key: "catalog", label: t("dataIngestion.tabs.catalog") },
     { key: "auto-scan", label: t("dataIngestion.tabs.autoScan") },
     ...(can("data_ingestion:agent_use")
       ? [{ key: "agent", label: t("dataIngestion.tabs.agent") }]
@@ -1934,29 +2556,161 @@ export function DataIngestionWorkbenchScene({
   }
 
   function renderImport() {
+    const previewableUploads = uploadItems.filter((item) => item.inspection);
+    const startedUploads = uploadItems.filter((item) => item.run || item.error);
+    const uploadPreviewIsBrowserNative =
+      activeUploadFile &&
+      (activeUploadFile.type.startsWith("image/") ||
+        activeUploadFile.type.startsWith("video/") ||
+        activeUploadFile.type === "application/pdf");
     return (
       <Space direction="vertical" size={16} style={{ width: "100%" }}>
-        <Card title={t("dataIngestion.import.title")}>
-          <Upload.Dragger
-            beforeUpload={(file) => {
-              void inspectFile(file);
-              return Upload.LIST_IGNORE;
-            }}
-            disabled={ingesting}
-            maxCount={1}
-            showUploadList={false}
-          >
-            <p className="ant-upload-drag-icon">
-              <CloudUploadOutlined />
-            </p>
-            <p className="ant-upload-text">
-              {inspection?.filename || t("dataIngestion.import.uploadHint")}
-            </p>
-            <p className="ant-upload-hint">{t("dataIngestion.import.uploadFormats")}</p>
-          </Upload.Dragger>
+        <Card
+          extra={
+            <Segmented
+              onChange={(value) => setImportMode(value as ImportMode)}
+              options={[
+                {
+                  label: t("dataIngestion.import.modeFiles"),
+                  value: "files",
+                },
+                {
+                  label: t("dataIngestion.import.modeSource"),
+                  value: "source",
+                },
+              ]}
+              value={importMode}
+            />
+          }
+          title={t("dataIngestion.import.title")}
+        >
+          {importMode === "files" ? (
+            <>
+              <Upload.Dragger
+                beforeUpload={(file) => {
+                  queueUploadFiles([file]);
+                  return Upload.LIST_IGNORE;
+                }}
+                disabled={ingesting}
+                multiple
+                showUploadList={false}
+              >
+                <p className="ant-upload-drag-icon">
+                  <CloudUploadOutlined />
+                </p>
+                <p className="ant-upload-text">{t("dataIngestion.import.uploadHint")}</p>
+                <p className="ant-upload-hint">{t("dataIngestion.import.uploadFormats")}</p>
+              </Upload.Dragger>
+              {uploadItems.length ? (
+                <Table<UploadQueueItem>
+                  columns={[
+                    {
+                      title: t("dataIngestion.import.fileName"),
+                      dataIndex: "file",
+                      key: "file",
+                      render: (_value, item) => (
+                        <Space direction="vertical" size={0}>
+                          <Text>{item.file.name}</Text>
+                          <Text type="secondary">
+                            {formatBytes(item.file.size)}
+                            {item.inspection ? ` · ${item.inspection.file_type}` : ""}
+                          </Text>
+                        </Space>
+                      ),
+                    },
+                    {
+                      title: t("dataIngestion.import.previewStatus"),
+                      key: "status",
+                      width: 150,
+                      render: (_value, item) => (
+                        <Tag color={statusColor(item.status)} title={item.error}>
+                          {t(`dataIngestion.import.uploadStatus.${item.status}`)}
+                        </Tag>
+                      ),
+                    },
+                    {
+                      title: t("dataIngestion.actions.preview"),
+                      key: "actions",
+                      width: 180,
+                      render: (_value, item) => (
+                        <Space>
+                          <Button
+                            disabled={!item.inspection || ingesting}
+                            onClick={() => {
+                              setActiveUploadId(item.id);
+                              setActiveSheetIndex(0);
+                            }}
+                            size="small"
+                            type="link"
+                          >
+                            {t("dataIngestion.actions.preview")}
+                          </Button>
+                          <Button
+                            danger
+                            disabled={ingesting}
+                            onClick={() => removeUploadItem(item.id)}
+                            size="small"
+                            type="link"
+                          >
+                            {t("dataIngestion.actions.remove")}
+                          </Button>
+                        </Space>
+                      ),
+                    },
+                  ]}
+                  dataSource={uploadItems}
+                  locale={{ emptyText: t("dataIngestion.import.noFiles") }}
+                  pagination={false}
+                  rowKey="id"
+                  size="small"
+                  style={{ marginTop: 16 }}
+                />
+              ) : (
+                <Empty
+                  description={t("dataIngestion.import.noFiles")}
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  style={{ marginTop: 16 }}
+                />
+              )}
+              {uploadItems.some((item) => item.error) ? (
+                <Alert
+                  description={uploadItems
+                    .filter((item) => item.error)
+                    .map((item) => `${item.file.name}: ${item.error}`)
+                    .join("\n")}
+                  message={t("dataIngestion.import.previewErrors")}
+                  showIcon
+                  style={{ marginTop: 12, whiteSpace: "pre-line" }}
+                  type="error"
+                />
+              ) : null}
+            </>
+          ) : (
+            <>
+              <Alert
+                description={t("dataIngestion.import.sourceModeDescription")}
+                message={t("dataIngestion.import.sourceModeTitle")}
+                showIcon
+                type="info"
+              />
+              {!ingestionSources.length ? (
+                <Alert
+                  action={
+                    <Button onClick={() => onViewChange("sources")} type="primary">
+                      {t("dataIngestion.import.goToSources")}
+                    </Button>
+                  }
+                  message={t("dataIngestion.import.noSources")}
+                  showIcon
+                  style={{ marginTop: 12 }}
+                  type="warning"
+                />
+              ) : null}
+            </>
+          )}
           <Form layout="vertical" style={{ marginTop: 16 }}>
             <Row gutter={16}>
-              <Col md={8} xs={24}>
+              <Col md={importMode === "source" ? 8 : 12} xs={24}>
                 <Form.Item label={t("dataIngestion.import.dataset")}>
                   <Space.Compact block>
                     <Select
@@ -1979,7 +2733,7 @@ export function DataIngestionWorkbenchScene({
                   </Space.Compact>
                 </Form.Item>
               </Col>
-              <Col md={8} xs={24}>
+              <Col md={importMode === "source" ? 8 : 12} xs={24}>
                 <Form.Item label={t("dataIngestion.import.template")}>
                   <Select
                     onChange={setSelectedTemplateCode}
@@ -1987,154 +2741,380 @@ export function DataIngestionWorkbenchScene({
                       label: item.name,
                       value: item.code,
                       disabled:
-                        !!inspection && !item.supported_types.includes(inspection.file_type),
+                        importMode === "files" &&
+                        uploadItems.some(
+                          (uploadItem) =>
+                            uploadItem.inspection &&
+                            !item.supported_types.includes(uploadItem.inspection.file_type),
+                        ),
                     }))}
                     value={selectedTemplateCode}
                   />
                 </Form.Item>
               </Col>
-              <Col md={8} xs={24}>
-                <Form.Item
-                  extra={t("dataIngestion.import.sourceUploadOnly")}
-                  label={t("dataIngestion.import.source")}
-                >
-                  <Select
-                    allowClear
-                    onChange={setSelectedSourceId}
-                    options={sources
-                      .filter((item) => item.source_type === "upload")
-                      .map((item) => ({
-                        label: item.name,
-                        value: item.id,
-                      }))}
-                    value={selectedSourceId || undefined}
-                  />
-                </Form.Item>
-              </Col>
             </Row>
+            {importMode === "source" ? (
+              <Form.Item
+                extra={t("dataIngestion.import.sourceHint")}
+                label={t("dataIngestion.import.source")}
+              >
+                <Select
+                  onChange={(sourceId) => {
+                    setSourceIngestionError("");
+                    setSourceIngestionRun(null);
+                    setSourceIngestionSourceId(sourceId);
+                  }}
+                  optionFilterProp="label"
+                  options={ingestionSources.map((item) => ({
+                    label: item.name,
+                    value: item.id,
+                  }))}
+                  placeholder={t("dataIngestion.import.selectSource")}
+                  showSearch
+                  value={sourceIngestionSourceId || undefined}
+                />
+              </Form.Item>
+            ) : null}
+            {importMode === "files" && uploadItems.length && !allUploadsSupportedByTemplate ? (
+              <Alert
+                message={t("dataIngestion.import.pipelineUnsupportedFiles")}
+                showIcon
+                style={{ marginBottom: 16 }}
+                type="warning"
+              />
+            ) : null}
             <Space>
               <Button
                 disabled={
                   !can("data_ingestion:create") ||
-                  Boolean(activeRun && ["queued", "running"].includes(activeRun.status))
+                  (importMode === "files"
+                    ? ingesting || !allUploadsReady || !allUploadsSupportedByTemplate
+                    : sourceIngesting ||
+                      !selectedIngestionSource ||
+                      !selectedDatasetId ||
+                      !selectedTemplateCode)
                 }
-                loading={ingesting}
-                onClick={() => void startIngestion()}
+                loading={importMode === "files" ? ingesting : sourceIngesting}
+                onClick={() =>
+                  void (importMode === "files" ? startFileIngestion() : startSourceIngestion())
+                }
                 type="primary"
               >
-                {t("dataIngestion.actions.startIngestion")}
+                {importMode === "files"
+                  ? t("dataIngestion.actions.startBatchIngestion")
+                  : t("dataIngestion.actions.startSourceIngestion")}
               </Button>
             </Space>
           </Form>
         </Card>
 
-        <Card loading={inspecting} title={t("dataIngestion.import.preview")}>
-          {!inspection ? (
-            <Empty description={t("dataIngestion.import.noPreview")} />
-          ) : (
-            <>
-              {inspection.sheets.length > 1 ? (
-                <Tabs
-                  activeKey={String(activeSheetIndex)}
-                  items={inspection.sheets.map((sheet, index) => ({
-                    key: String(index),
-                    label: `${sheet.name} (${displayValue(
-                      sheet.metadata.row_count ?? sheet.rows.length,
-                    )})`,
-                  }))}
-                  onChange={(key) => setActiveSheetIndex(Number(key))}
-                  size="small"
-                />
-              ) : null}
-              {activeSheet?.warnings.length ? (
-                <Alert
-                  description={activeSheet.warnings.join("; ")}
-                  message={t("dataIngestion.import.warnings")}
-                  showIcon
-                  style={{ marginBottom: 12 }}
-                  type="warning"
-                />
-              ) : null}
-              <Descriptions column={{ md: 4, xs: 1 }} size="small">
-                <Descriptions.Item label={t("dataIngestion.import.rows")}>
-                  {activeSheet?.rows.length ?? 0}
-                </Descriptions.Item>
-                <Descriptions.Item label={t("dataIngestion.import.columns")}>
-                  {activeSheet?.columns.length ?? 0}
-                </Descriptions.Item>
-                <Descriptions.Item label="Type">{inspection.file_type}</Descriptions.Item>
-                <Descriptions.Item label="Size">{formatBytes(inspection.size)}</Descriptions.Item>
-              </Descriptions>
-              {inspection.preview_type === "table" ? (
-                <Table
-                  columns={activeSheet?.columns.map((column) => ({
-                    title: column,
-                    dataIndex: column,
-                    key: column,
-                    render: (value: unknown) => displayValue(value),
-                  }))}
-                  dataSource={activeSheet?.rows ?? []}
-                  pagination={false}
-                  rowKey={(row) => JSON.stringify(row).slice(0, 64)}
-                  scroll={{ x: "max-content", y: 360 }}
-                  size="small"
-                />
-              ) : (
-                <pre className={styles.codeBlock}>
-                  {displayValue(inspection.metadata.excerpt || inspection.metadata)}
-                </pre>
-              )}
-            </>
-          )}
-        </Card>
+        {importMode === "files" ? (
+          <Card
+            loading={inspecting}
+            title={
+              activeUploadItem
+                ? t("dataIngestion.import.activeFilePreview", {
+                    file: activeUploadItem.file.name,
+                  })
+                : t("dataIngestion.import.preview")
+            }
+          >
+            {!inspection ? (
+              <Empty description={t("dataIngestion.import.noPreview")} />
+            ) : (
+              <>
+                {previewableUploads.length > 1 ? (
+                  <Tabs
+                    activeKey={activeUploadId}
+                    items={previewableUploads.map((item) => ({
+                      key: item.id,
+                      label: item.file.name,
+                    }))}
+                    onChange={(key) => {
+                      setActiveUploadId(key);
+                      setActiveSheetIndex(0);
+                    }}
+                    size="small"
+                    type="card"
+                  />
+                ) : null}
+                {inspection.sheets.length > 1 ? (
+                  <Tabs
+                    activeKey={String(activeSheetIndex)}
+                    items={inspection.sheets.map((sheet, index) => ({
+                      key: String(index),
+                      label: `${sheet.name} (${displayValue(
+                        sheet.metadata.row_count ?? sheet.rows.length,
+                      )})`,
+                    }))}
+                    onChange={(key) => setActiveSheetIndex(Number(key))}
+                    size="small"
+                  />
+                ) : null}
+                {activeSheet?.warnings.length ? (
+                  <Alert
+                    description={activeSheet.warnings.join("; ")}
+                    message={t("dataIngestion.import.warnings")}
+                    showIcon
+                    style={{ marginBottom: 12 }}
+                    type="warning"
+                  />
+                ) : null}
+                <Descriptions column={{ md: 4, xs: 1 }} size="small">
+                  {inspection.preview_type === "table" ? (
+                    <>
+                      <Descriptions.Item label={t("dataIngestion.import.rows")}>
+                        {activeSheet?.rows.length ?? 0}
+                      </Descriptions.Item>
+                      <Descriptions.Item label={t("dataIngestion.import.columns")}>
+                        {activeSheet?.columns.length ?? 0}
+                      </Descriptions.Item>
+                    </>
+                  ) : null}
+                  <Descriptions.Item label="Type">{inspection.file_type}</Descriptions.Item>
+                  <Descriptions.Item label="Size">{formatBytes(inspection.size)}</Descriptions.Item>
+                  {typeof inspection.metadata.table_count === "number" ? (
+                    <Descriptions.Item label={t("dataIngestion.import.tables")}>
+                      {inspection.metadata.table_count}
+                    </Descriptions.Item>
+                  ) : null}
+                </Descriptions>
+                {browserPreviewUrl && uploadPreviewIsBrowserNative ? (
+                  activeUploadFile?.type.startsWith("image/") ? (
+                    <img
+                      alt={activeUploadFile.name}
+                      src={browserPreviewUrl}
+                      style={{
+                        display: "block",
+                        margin: "16px auto",
+                        maxHeight: 560,
+                        maxWidth: "100%",
+                        objectFit: "contain",
+                      }}
+                    />
+                  ) : activeUploadFile?.type.startsWith("video/") ? (
+                    <video
+                      controls
+                      src={browserPreviewUrl}
+                      style={{ display: "block", margin: "16px auto", maxWidth: "100%" }}
+                    />
+                  ) : (
+                    <iframe
+                      src={browserPreviewUrl}
+                      style={{ border: 0, height: 560, marginTop: 16, width: "100%" }}
+                      title={activeUploadFile?.name}
+                    />
+                  )
+                ) : null}
+                {inspection.preview_type === "table" ? (
+                  <Table
+                    columns={activeSheet?.columns.map((column) => ({
+                      title: column,
+                      dataIndex: column,
+                      key: column,
+                      render: (value: unknown) => displayValue(value),
+                    }))}
+                    dataSource={activeSheet?.rows ?? []}
+                    pagination={false}
+                    rowKey={(row) => JSON.stringify(row).slice(0, 64)}
+                    scroll={{ x: "max-content", y: 360 }}
+                    size="small"
+                  />
+                ) : !browserPreviewUrl ? (
+                  <pre className={styles.codeBlock}>
+                    {displayValue(inspection.metadata.excerpt || inspection.metadata)}
+                  </pre>
+                ) : inspection.metadata.excerpt ? (
+                  <pre className={styles.codeBlock}>
+                    {displayValue(inspection.metadata.excerpt)}
+                  </pre>
+                ) : null}
+                {documentTables.length ? (
+                  <>
+                    <Divider />
+                    <Space align="center" wrap>
+                      <Title level={5} style={{ margin: 0 }}>
+                        {t("dataIngestion.import.extractedTables")}
+                      </Title>
+                      <Tag color="blue">
+                        {t("dataIngestion.import.tableCount", {
+                          count: inspection.metadata.table_count ?? documentTables.length,
+                        })}
+                      </Tag>
+                      {inspection.metadata.table_preview_truncated ? (
+                        <Text type="secondary">{t("dataIngestion.import.tablePreviewHint")}</Text>
+                      ) : null}
+                    </Space>
+                    {documentTables.map((table) => {
+                      const header = table.rows[0] ?? [];
+                      const columnCount = Math.max(header.length, table.column_count);
+                      return (
+                        <Card
+                          key={table.index}
+                          size="small"
+                          style={{ marginTop: 12 }}
+                          title={t("dataIngestion.import.tableTitle", {
+                            index: table.index,
+                            page:
+                              table.page === undefined
+                                ? ""
+                                : t("dataIngestion.import.tablePage", {
+                                    page: table.page,
+                                  }),
+                          })}
+                        >
+                          <Table
+                            columns={Array.from({ length: columnCount }, (_, index) => ({
+                              dataIndex: String(index),
+                              key: String(index),
+                              render: (value: unknown) => displayValue(value),
+                              title:
+                                header[index] ||
+                                t("dataIngestion.import.columnNumber", {
+                                  index: index + 1,
+                                }),
+                            }))}
+                            dataSource={documentTableRows(table)}
+                            pagination={false}
+                            rowKey="key"
+                            scroll={{ x: "max-content" }}
+                            size="small"
+                          />
+                        </Card>
+                      );
+                    })}
+                  </>
+                ) : null}
+              </>
+            )}
+          </Card>
+        ) : selectedIngestionSource ? (
+          <Card title={t("dataIngestion.import.selectedSource")}>
+            <Descriptions column={{ md: 3, xs: 1 }} size="small">
+              <Descriptions.Item label={t("dataIngestion.sources.name")}>
+                {selectedIngestionSource.name}
+              </Descriptions.Item>
+              <Descriptions.Item label={t("dataIngestion.sources.type")}>
+                {t(`dataIngestion.sourceTypes.${selectedIngestionSource.source_type}`)}
+              </Descriptions.Item>
+              <Descriptions.Item label={t("dataIngestion.sources.status")}>
+                {t(`dataIngestion.status.${selectedIngestionSource.status}`)}
+              </Descriptions.Item>
+            </Descriptions>
+          </Card>
+        ) : null}
 
-        <Card title={t("dataIngestion.import.runtime")}>
-          {!activeRun ? (
-            <Empty description={t("dataIngestion.import.notStarted")} />
-          ) : (
-            <>
+        {importMode === "files" && startedUploads.length ? (
+          <Card title={t("dataIngestion.import.batchRuntime")}>
+            <Table<UploadQueueItem>
+              columns={[
+                {
+                  title: t("dataIngestion.import.fileName"),
+                  dataIndex: "file",
+                  key: "file",
+                  render: (_value, item) => item.file.name,
+                },
+                {
+                  title: t("dataIngestion.sources.status"),
+                  key: "status",
+                  render: (_value, item) => (
+                    <Tag color={statusColor(item.status)}>
+                      {t(`dataIngestion.import.uploadStatus.${item.status}`)}
+                    </Tag>
+                  ),
+                },
+                {
+                  title: t("dataIngestion.runs.inserted"),
+                  key: "inserted",
+                  render: (_value, item) => item.run?.inserted_count ?? "-",
+                },
+                {
+                  title: t("dataIngestion.runs.updated"),
+                  key: "updated",
+                  render: (_value, item) => item.run?.updated_count ?? "-",
+                },
+                {
+                  title: t("dataIngestion.runs.duplicates"),
+                  key: "duplicates",
+                  render: (_value, item) => item.run?.duplicate_count ?? "-",
+                },
+                {
+                  title: t("dataIngestion.import.error"),
+                  key: "error",
+                  render: (_value, item) => item.error || item.run?.error_message || "-",
+                },
+                {
+                  title: t("dataIngestion.actions.view"),
+                  key: "actions",
+                  render: (_value, item) =>
+                    item.run ? (
+                      <Button onClick={() => void openRun(item.run!)} size="small" type="link">
+                        {t("dataIngestion.runs.detail")}
+                      </Button>
+                    ) : (
+                      "-"
+                    ),
+                },
+              ]}
+              dataSource={uploadItems}
+              pagination={false}
+              rowKey="id"
+              scroll={{ x: 900 }}
+              size="small"
+            />
+          </Card>
+        ) : null}
+
+        {importMode === "source" ? (
+          <Card title={t("dataIngestion.import.sourceRuntime")}>
+            {sourceIngestionError ? (
               <Alert
-                message={
-                  activeRun.status === "success"
-                    ? t("dataIngestion.import.success")
-                    : activeRun.status === "failed"
-                      ? t("dataIngestion.import.failed")
-                      : t(`dataIngestion.status.${activeRun.status}`)
-                }
+                description={sourceIngestionError}
+                message={t("dataIngestion.import.failed")}
                 showIcon
-                type={
-                  activeRun.status === "success"
-                    ? "success"
-                    : activeRun.status === "failed"
-                      ? "error"
-                      : "info"
-                }
+                type="error"
               />
-              <Space style={{ margin: "12px 0" }} wrap>
-                <Tag color={statusColor(activeRun.status)}>
-                  {t(`dataIngestion.status.${activeRun.status}`)}
-                </Tag>
-                <Text>
-                  {t("dataIngestion.import.inserted", { count: activeRun.inserted_count })}
-                </Text>
-                <Text>
-                  {t("dataIngestion.import.duplicates", {
-                    count: activeRun.duplicate_count,
-                  })}
-                </Text>
-                {onOpenRun ? (
-                  <Button onClick={() => onOpenRun(activeRun.id)} type="link">
+            ) : !sourceIngestionRun ? (
+              <Empty description={t("dataIngestion.import.notStarted")} />
+            ) : (
+              <>
+                <Alert
+                  message={
+                    sourceIngestionRun.status === "success"
+                      ? t("dataIngestion.import.success")
+                      : t("dataIngestion.import.failed")
+                  }
+                  showIcon
+                  type={sourceIngestionRun.status === "success" ? "success" : "error"}
+                />
+                <Space style={{ margin: "12px 0" }} wrap>
+                  <Tag color={statusColor(sourceIngestionRun.status)}>
+                    {t(`dataIngestion.status.${sourceIngestionRun.status}`)}
+                  </Tag>
+                  <Text>
+                    {t("dataIngestion.import.inserted", {
+                      count: sourceIngestionRun.inserted_count,
+                    })}
+                  </Text>
+                  <Text>
+                    {t("dataIngestion.import.duplicates", {
+                      count: sourceIngestionRun.duplicate_count,
+                    })}
+                  </Text>
+                  <Button onClick={() => void openRun(sourceIngestionRun)} type="link">
                     {t("dataIngestion.runs.detail")}
                   </Button>
-                ) : null}
-              </Space>
-              <StageDetail
-                run={activeRun}
-                template={templates.find((template) => template.code === activeRun.template_code)}
-              />
-            </>
-          )}
-        </Card>
+                </Space>
+                <StageDetail
+                  run={sourceIngestionRun}
+                  template={templates.find(
+                    (template) => template.code === sourceIngestionRun.template_code,
+                  )}
+                />
+              </>
+            )}
+          </Card>
+        ) : null}
       </Space>
     );
   }
@@ -2251,29 +3231,9 @@ export function DataIngestionWorkbenchScene({
               icon={<PlusOutlined />}
               onClick={() => {
                 setEditingSourceId(null);
-                setSourceForm({
-                  body: "{}",
-                  headers: "{}",
-                  name: "",
-                  source_type: "upload",
-                  method: "GET",
-                  pagination_type: "none",
-                  page_param: "page",
-                  page_size: "100",
-                  max_pages: "10",
-                  next_url_path: "",
-                  host: "",
-                  port: "",
-                  path: "",
-                  username: "",
-                  password: "",
-                  database: "",
-                  private_key: "",
-                  query: "",
-                  record_path: "",
-                  use_tls: false,
-                  watermark_column: "",
-                });
+                setSourceForm(emptySourceForm());
+                setSourceCatalog(null);
+                setSourceCatalogError("");
                 setSourceModalOpen(true);
               }}
               type="primary"
@@ -2342,13 +3302,34 @@ export function DataIngestionWorkbenchScene({
       <Space direction="vertical" size={16} style={{ width: "100%" }}>
         <Card
           extra={
-            <Button
-              disabled={!can("data_ingestion:create")}
-              icon={<PlusOutlined />}
-              onClick={openDatasetCreator}
-            >
-              {t("dataIngestion.actions.createDataset")}
-            </Button>
+            <Space wrap>
+              <Button
+                disabled={!selectedCatalogDataset}
+                icon={<FileTextOutlined />}
+                onClick={() => {
+                  if (selectedCatalogDataset) {
+                    void openDatasetContract(selectedCatalogDataset);
+                  }
+                }}
+              >
+                {t("dataIngestion.contract.title")}
+              </Button>
+              <Button
+                disabled={!selectedCatalogDataset}
+                icon={<ApartmentOutlined />}
+                onClick={() => openDatasetProvenance()}
+              >
+                {t("dataIngestion.provenance.title")}
+              </Button>
+              <Button
+                disabled={!can("data_ingestion:create")}
+                icon={<PlusOutlined />}
+                onClick={openDatasetCreator}
+                type="primary"
+              >
+                {t("dataIngestion.actions.createDataset")}
+              </Button>
+            </Space>
           }
           title={t("dataIngestion.catalog.title")}
         >
@@ -2366,21 +3347,31 @@ export function DataIngestionWorkbenchScene({
             dataSource={visibleDatasets}
             locale={{ emptyText: t("dataIngestion.catalog.emptyDatasets") }}
             rowKey="id"
+            scroll={{ x: 1450 }}
           />
         </Card>
         <Card
           extra={
-            <Space.Compact>
-              <Input
-                onChange={(event) => setRecordSearch(event.target.value)}
-                placeholder={t("dataIngestion.catalog.recordSearch")}
-                prefix={<SearchOutlined />}
-                value={recordSearch}
-              />
-              <Button onClick={() => void loadRecords(selectedCatalogDatasetId, 1)}>
-                {t("dataIngestion.actions.refresh")}
+            <Space wrap>
+              <Button
+                disabled={!selectedCatalogDataset}
+                icon={<ApartmentOutlined />}
+                onClick={() => openDatasetProvenance()}
+              >
+                {t("dataIngestion.provenance.title")}
               </Button>
-            </Space.Compact>
+              <Space.Compact>
+                <Input
+                  onChange={(event) => setRecordSearch(event.target.value)}
+                  placeholder={t("dataIngestion.catalog.recordSearch")}
+                  prefix={<SearchOutlined />}
+                  value={recordSearch}
+                />
+                <Button onClick={() => void loadRecords(selectedCatalogDatasetId, 1)}>
+                  {t("dataIngestion.actions.refresh")}
+                </Button>
+              </Space.Compact>
+            </Space>
           }
           title={t("dataIngestion.catalog.recordsTitle", {
             name: selectedCatalogDataset?.name || "-",
@@ -2459,6 +3450,21 @@ export function DataIngestionWorkbenchScene({
   const sourceIsDatabase = ["mysql", "postgres"].includes(sourceForm.source_type);
   const sourceIsApi = sourceForm.source_type === "api";
   const scanUsesFiles = ["local", "ftp", "sftp"].includes(scanForm.scan_type);
+  const selectedScanSource = sources.find((source) => source.id === scanForm.source_id);
+  const databaseTableOptions = (sourceCatalog?.tables ?? []).map((table) => ({
+    value: table.name,
+    label:
+      table.kind === "view"
+        ? `${table.name} · ${t("dataIngestion.sources.databaseView")}`
+        : table.name,
+  }));
+  const databaseColumnOptions = (sourceCatalog?.columns ?? []).map((column) => ({
+    value: column.name,
+    label:
+      column.name === sourceCatalog?.recommended_watermark
+        ? `${column.name} · ${t("dataIngestion.sources.recommended")}`
+        : `${column.name} (${column.type})`,
+  }));
 
   const viewContent = {
     overview: renderOverview,
@@ -2655,12 +3661,248 @@ export function DataIngestionWorkbenchScene({
               dataSource={pipelineDrawer.steps}
               pagination={false}
               rowKey="key"
-              scroll={{ x: 1500 }}
+              scroll={{ x: 1820 }}
               size="small"
             />
           </>
         ) : null}
       </Drawer>
+
+      <Drawer
+        destroyOnClose
+        onClose={() => {
+          setContractDataset(null);
+          setDatasetContract(null);
+          setContractError("");
+        }}
+        open={Boolean(contractDataset)}
+        title={`${t("dataIngestion.contract.title")} · ${contractDataset?.name ?? ""}`}
+        width="min(1180px, 96vw)"
+      >
+        {contractLoading ? (
+          <div style={{ display: "grid", placeItems: "center", minHeight: 240 }}>
+            <Spin />
+          </div>
+        ) : contractError ? (
+          <Alert message={contractError} showIcon type="error" />
+        ) : datasetContract ? (
+          <Space direction="vertical" size={16} style={{ width: "100%" }}>
+            <Descriptions bordered column={3} size="small">
+              <Descriptions.Item label={t("dataIngestion.contract.schemaVersion")}>
+                <Text code>{datasetContract.schema.schema_version}</Text>
+              </Descriptions.Item>
+              <Descriptions.Item label={t("dataIngestion.contract.sampleCount")}>
+                {datasetContract.schema.sampled_records} / {datasetContract.schema.total_records}
+              </Descriptions.Item>
+              <Descriptions.Item label={t("dataIngestion.contract.stableKey")}>
+                {datasetContract.schema.stable_key_strategy === "business_key"
+                  ? t("dataIngestion.contract.businessKey")
+                  : t("dataIngestion.contract.contentFingerprint")}
+              </Descriptions.Item>
+              <Descriptions.Item label={t("dataIngestion.contract.primaryKeys")}>
+                {datasetContract.schema.primary_key_fields.length
+                  ? datasetContract.schema.primary_key_fields.join(", ")
+                  : "-"}
+              </Descriptions.Item>
+              <Descriptions.Item label={t("dataIngestion.contract.qualityScore")}>
+                <Tag color={datasetContract.quality.status === "passed" ? "green" : "red"}>
+                  {datasetContract.quality.score}
+                </Tag>
+              </Descriptions.Item>
+              <Descriptions.Item label={t("dataIngestion.contract.completeness")}>
+                {Math.round(datasetContract.quality.completeness * 1000) / 10}%
+              </Descriptions.Item>
+            </Descriptions>
+
+            <Card
+              extra={
+                <Button loading={backfillingProvenance} onClick={() => void backfillProvenance()}>
+                  {t("dataIngestion.contract.backfillProvenance")}
+                </Button>
+              }
+              title={t("dataIngestion.contract.fieldsTitle")}
+            >
+              <Table
+                columns={contractFieldColumns}
+                dataSource={datasetContract.schema.fields}
+                pagination={false}
+                rowKey="name"
+                scroll={{ x: 900 }}
+                size="small"
+              />
+            </Card>
+
+            <Card
+              extra={
+                <Button
+                  loading={startingQualityCheck}
+                  onClick={() => void startFullQualityCheck()}
+                  type="primary"
+                >
+                  {t("dataIngestion.contract.startFullCheck")}
+                </Button>
+              }
+              title={t("dataIngestion.contract.fullQualityTitle")}
+            >
+              <Descriptions bordered column={3} size="small">
+                <Descriptions.Item label={t("dataIngestion.contract.status")}>
+                  <Tag
+                    color={
+                      fullQualityCheck?.status === "completed"
+                        ? "green"
+                        : fullQualityCheck?.status === "failed"
+                          ? "red"
+                          : fullQualityCheck &&
+                              ["queued", "running"].includes(fullQualityCheck.status)
+                            ? "blue"
+                            : "default"
+                    }
+                  >
+                    {t(
+                      `dataIngestion.contract.qualityCheckStatus.${fullQualityCheck?.status ?? "not_started"}`,
+                    )}
+                  </Tag>
+                </Descriptions.Item>
+                <Descriptions.Item label={t("dataIngestion.contract.totalRecords")}>
+                  {fullQualityCheck?.total_records ?? 0}
+                </Descriptions.Item>
+                <Descriptions.Item label={t("dataIngestion.contract.qualityScore")}>
+                  {"score" in (fullQualityCheck?.report ?? {})
+                    ? String(fullQualityCheck?.report.score)
+                    : "-"}
+                </Descriptions.Item>
+                <Descriptions.Item label={t("dataIngestion.contract.completeness")}>
+                  {"completeness" in (fullQualityCheck?.report ?? {})
+                    ? `${
+                        Math.round(Number(fullQualityCheck?.report.completeness ?? 0) * 1000) / 10
+                      }%`
+                    : "-"}
+                </Descriptions.Item>
+                <Descriptions.Item label={t("dataIngestion.contract.startedAt")}>
+                  {formatTime(fullQualityCheck?.started_at)}
+                </Descriptions.Item>
+                <Descriptions.Item label={t("dataIngestion.contract.finishedAt")}>
+                  {formatTime(fullQualityCheck?.finished_at)}
+                </Descriptions.Item>
+              </Descriptions>
+              {fullQualityCheck?.error_message ? (
+                <Alert
+                  message={fullQualityCheck.error_message}
+                  showIcon
+                  style={{ marginTop: 12 }}
+                  type="error"
+                />
+              ) : null}
+            </Card>
+
+            <Card
+              title={t("dataIngestion.contract.qualityTitle")}
+              extra={
+                <Tag color={datasetContract.quality.status === "passed" ? "green" : "red"}>
+                  {t(`dataIngestion.contract.qualityStatus.${datasetContract.quality.status}`)}
+                </Tag>
+              }
+            >
+              {datasetContract.quality.issues.length ? (
+                <Table
+                  columns={[
+                    {
+                      title: t("dataIngestion.contract.severity"),
+                      dataIndex: "severity",
+                      key: "severity",
+                      render: (value: "warning" | "error") => (
+                        <Tag color={value === "error" ? "red" : "gold"}>
+                          {t(`dataIngestion.contract.severityLevels.${value}`)}
+                        </Tag>
+                      ),
+                      width: 100,
+                    },
+                    {
+                      title: t("dataIngestion.contract.field"),
+                      dataIndex: "field",
+                      key: "field",
+                      render: (value?: string) => value || "-",
+                      width: 180,
+                    },
+                    {
+                      title: t("dataIngestion.contract.message"),
+                      dataIndex: "message",
+                      key: "message",
+                    },
+                  ]}
+                  dataSource={datasetContract.quality.issues}
+                  pagination={false}
+                  rowKey={(item) => `${item.code}:${item.field ?? ""}:${item.message}`}
+                  size="small"
+                />
+              ) : (
+                <Alert message={t("dataIngestion.contract.noIssues")} showIcon type="success" />
+              )}
+            </Card>
+
+            <Card
+              extra={
+                <Button
+                  loading={publishingDataset}
+                  onClick={() => void publishDatasetContract()}
+                  type="primary"
+                >
+                  {t("dataIngestion.contract.publish")}
+                </Button>
+              }
+              title={t("dataIngestion.contract.publicationTitle")}
+            >
+              <Descriptions bordered column={2} size="small">
+                <Descriptions.Item label={t("dataIngestion.contract.status")}>
+                  <Tag
+                    color={
+                      datasetContract.publication.status === "failed"
+                        ? "red"
+                        : datasetContract.publication.status === "not_published"
+                          ? "default"
+                          : "blue"
+                    }
+                  >
+                    {t(
+                      `dataIngestion.contract.publicationStatus.${datasetContract.publication.status}`,
+                      { defaultValue: datasetContract.publication.status },
+                    )}
+                  </Tag>
+                </Descriptions.Item>
+                <Descriptions.Item label={t("dataIngestion.contract.catalogId")}>
+                  <Text code>{datasetContract.publication.catalog_id || "-"}</Text>
+                </Descriptions.Item>
+                <Descriptions.Item label={t("dataIngestion.contract.resourceId")}>
+                  <Text code>{datasetContract.publication.resource_id || "-"}</Text>
+                </Descriptions.Item>
+                <Descriptions.Item label={t("dataIngestion.contract.lastPublished")}>
+                  {formatTime(datasetContract.publication.last_published_at)}
+                </Descriptions.Item>
+              </Descriptions>
+              {datasetContract.publication.last_error ? (
+                <Alert
+                  message={datasetContract.publication.last_error}
+                  showIcon
+                  style={{ marginTop: 12 }}
+                  type="error"
+                />
+              ) : null}
+            </Card>
+          </Space>
+        ) : null}
+      </Drawer>
+
+      <DatasetProvenanceDrawer
+        dataset={selectedCatalogDataset ?? null}
+        initialRecord={provenanceRecord}
+        onClose={() => {
+          setProvenanceOpen(false);
+          setProvenanceRecord(null);
+        }}
+        open={provenanceOpen}
+        sources={sources}
+        spaceName={activeSpace?.name ?? ""}
+      />
 
       <ControlDatabaseSwitchModal
         onCancel={() => setControlDatabaseModalOpen(false)}
@@ -2883,6 +4125,32 @@ export function DataIngestionWorkbenchScene({
         }
       >
         <Form layout="vertical">
+          {sourceCatalogError ? (
+            <Alert
+              closable
+              description={
+                <>
+                  <div>
+                    {t(
+                      `dataIngestion.sources.connectionErrorHints.${classifySourceConnectionError(
+                        sourceCatalogError,
+                      )}`,
+                    )}
+                  </div>
+                  <Text code>{sourceCatalogError}</Text>
+                </>
+              }
+              message={t(
+                `dataIngestion.sources.connectionErrorTitles.${classifySourceConnectionError(
+                  sourceCatalogError,
+                )}`,
+              )}
+              onClose={() => setSourceCatalogError("")}
+              showIcon
+              style={{ marginBottom: 16 }}
+              type="error"
+            />
+          ) : null}
           <Form.Item label={t("dataIngestion.sources.name")} required>
             <Input
               onChange={(event) =>
@@ -2894,7 +4162,19 @@ export function DataIngestionWorkbenchScene({
           </Form.Item>
           <Form.Item label={t("dataIngestion.sources.type")}>
             <Select
-              onChange={(source_type) => setSourceForm((current) => ({ ...current, source_type }))}
+              onChange={(source_type) => {
+                setSourceForm((current) => ({
+                  ...current,
+                  source_type,
+                  query_mode: "table",
+                  table_name: "",
+                  schema_name: "",
+                  watermark_column: "",
+                  initial_cursor: "",
+                }));
+                setSourceCatalog(null);
+                setSourceCatalogError("");
+              }}
               options={["upload", "local_dir", "ftp", "sftp", "mysql", "postgres", "api"].map(
                 (value) => ({
                   value,
@@ -3118,15 +4398,30 @@ export function DataIngestionWorkbenchScene({
                 </Form.Item>
               </Col>
               <Col span={12}>
-                <Form.Item label={t("dataIngestion.sources.password")}>
+                <Form.Item
+                  help={
+                    sourceCatalogError &&
+                    classifySourceConnectionError(sourceCatalogError) === "auth"
+                      ? t("dataIngestion.sources.passwordRejected")
+                      : undefined
+                  }
+                  label={t("dataIngestion.sources.password")}
+                  validateStatus={
+                    sourceCatalogError &&
+                    classifySourceConnectionError(sourceCatalogError) === "auth"
+                      ? "error"
+                      : undefined
+                  }
+                >
                   <Input.Password
                     autoComplete="new-password"
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      setSourceCatalogError("");
                       setSourceForm((current) => ({
                         ...current,
                         password: event.target.value,
-                      }))
-                    }
+                      }));
+                    }}
                     placeholder={
                       editingSourceId ? t("dataIngestion.sources.passwordKeep") : undefined
                     }
@@ -3179,21 +4474,159 @@ export function DataIngestionWorkbenchScene({
           ) : null}
           {sourceIsDatabase ? (
             <>
-              <Row gutter={12}>
-                <Col span={12}>
-                  <Form.Item label={t("dataIngestion.sources.database")}>
-                    <Input
-                      onChange={(event) =>
+              <Form.Item label={t("dataIngestion.sources.database")}>
+                <Input
+                  onChange={(event) =>
+                    setSourceForm((current) => ({
+                      ...current,
+                      database: event.target.value,
+                    }))
+                  }
+                  value={sourceForm.database}
+                />
+              </Form.Item>
+              <Form.Item label={t("dataIngestion.sources.configurationMode")}>
+                <Select
+                  onChange={(query_mode: "table" | "custom") =>
+                    setSourceForm((current) => ({ ...current, query_mode }))
+                  }
+                  options={[
+                    {
+                      value: "table",
+                      label: t("dataIngestion.sources.tableMode"),
+                    },
+                    {
+                      value: "custom",
+                      label: t("dataIngestion.sources.customQueryMode"),
+                    },
+                  ]}
+                  value={sourceForm.query_mode}
+                />
+              </Form.Item>
+              {sourceForm.query_mode === "table" ? (
+                <>
+                  <Form.Item
+                    extra={t("dataIngestion.sources.tableNameHint")}
+                    label={t("dataIngestion.sources.tableName")}
+                  >
+                    <Space.Compact block>
+                      <Select
+                        loading={sourceCatalogLoading}
+                        onChange={(tableName) => void loadDatabaseCatalog(tableName)}
+                        options={
+                          databaseTableOptions.length || !sourceForm.table_name
+                            ? databaseTableOptions
+                            : [{ value: sourceForm.table_name, label: sourceForm.table_name }]
+                        }
+                        placeholder={t("dataIngestion.sources.tableNamePlaceholder")}
+                        showSearch
+                        style={{ width: "100%" }}
+                        value={sourceForm.table_name || undefined}
+                      />
+                      <Button
+                        icon={<ReloadOutlined />}
+                        loading={sourceCatalogLoading}
+                        onClick={() => void loadDatabaseCatalog()}
+                      >
+                        {t("dataIngestion.sources.loadTables")}
+                      </Button>
+                    </Space.Compact>
+                  </Form.Item>
+                  <Form.Item label={t("dataIngestion.sources.syncMode")}>
+                    <Select
+                      onChange={(sync_mode: "full" | "incremental") =>
                         setSourceForm((current) => ({
                           ...current,
-                          database: event.target.value,
+                          sync_mode,
+                          watermark_column:
+                            sync_mode === "incremental"
+                              ? current.watermark_column ||
+                                sourceCatalog?.recommended_watermark ||
+                                ""
+                              : "",
+                          initial_cursor:
+                            sync_mode === "incremental"
+                              ? current.initial_cursor ||
+                                sourceCatalog?.recommended_initial_cursor ||
+                                ""
+                              : "",
                         }))
                       }
-                      value={sourceForm.database}
+                      options={[
+                        {
+                          value: "full",
+                          label: t("dataIngestion.sources.syncModes.full"),
+                        },
+                        {
+                          value: "incremental",
+                          label: t("dataIngestion.sources.syncModes.incremental"),
+                        },
+                      ]}
+                      value={sourceForm.sync_mode}
                     />
                   </Form.Item>
-                </Col>
-                <Col span={12}>
+                  {sourceForm.sync_mode === "incremental" ? (
+                    <Form.Item
+                      extra={
+                        sourceCatalog?.recommendation_reason ||
+                        t("dataIngestion.sources.changeFieldHint")
+                      }
+                      label={t("dataIngestion.sources.changeField")}
+                    >
+                      <Select
+                        onChange={(watermark_column) => {
+                          const column = sourceCatalog?.columns.find(
+                            (item) => item.name === watermark_column,
+                          );
+                          const type = column?.type.toUpperCase() ?? "";
+                          const initial_cursor =
+                            watermark_column === sourceCatalog?.recommended_watermark
+                              ? sourceCatalog.recommended_initial_cursor
+                              : type.includes("INT") ||
+                                  type.includes("NUMBER") ||
+                                  type.includes("NUMERIC")
+                                ? "0"
+                                : type.includes("DATE") || type.includes("TIME")
+                                  ? "1970-01-01T00:00:00"
+                                  : "";
+                          setSourceForm((current) => ({
+                            ...current,
+                            watermark_column,
+                            initial_cursor,
+                          }));
+                        }}
+                        options={databaseColumnOptions}
+                        placeholder={t("dataIngestion.sources.changeFieldPlaceholder")}
+                        showSearch
+                        value={sourceForm.watermark_column || undefined}
+                      />
+                    </Form.Item>
+                  ) : null}
+                  {sourceCatalog?.table_name ? (
+                    <Alert
+                      description={
+                        sourceForm.sync_mode === "incremental"
+                          ? t("dataIngestion.sources.autoQueryIncremental", {
+                              field: sourceForm.watermark_column,
+                            })
+                          : t("dataIngestion.sources.autoQueryFull")
+                      }
+                      message={t("dataIngestion.sources.autoQueryReady")}
+                      showIcon
+                      style={{ marginBottom: 16 }}
+                      type="success"
+                    />
+                  ) : (
+                    <Alert
+                      message={t("dataIngestion.sources.loadTablesFirst")}
+                      showIcon
+                      style={{ marginBottom: 16 }}
+                      type="info"
+                    />
+                  )}
+                </>
+              ) : (
+                <>
                   <Form.Item
                     extra={t("dataIngestion.sources.watermarkHint")}
                     label={t("dataIngestion.sources.watermark")}
@@ -3208,20 +4641,20 @@ export function DataIngestionWorkbenchScene({
                       value={sourceForm.watermark_column}
                     />
                   </Form.Item>
-                </Col>
-              </Row>
-              <Form.Item label={t("dataIngestion.sources.query")}>
-                <Input.TextArea
-                  onChange={(event) =>
-                    setSourceForm((current) => ({
-                      ...current,
-                      query: event.target.value,
-                    }))
-                  }
-                  rows={4}
-                  value={sourceForm.query}
-                />
-              </Form.Item>
+                  <Form.Item label={t("dataIngestion.sources.query")}>
+                    <Input.TextArea
+                      onChange={(event) =>
+                        setSourceForm((current) => ({
+                          ...current,
+                          query: event.target.value,
+                        }))
+                      }
+                      rows={4}
+                      value={sourceForm.query}
+                    />
+                  </Form.Item>
+                </>
+              )}
             </>
           ) : null}
         </Form>
@@ -3386,6 +4819,23 @@ export function DataIngestionWorkbenchScene({
               </Form.Item>
             </Col>
           </Row>
+          {scanForm.scan_type === "database" && selectedScanSource ? (
+            <Alert
+              message={t("dataIngestion.autoScan.databaseSettingsFromSource")}
+              description={
+                selectedScanSource.config.query_mode === "table"
+                  ? selectedScanSource.config.sync_mode === "incremental"
+                    ? t("dataIngestion.autoScan.databaseIncrementalField", {
+                        field: displayValue(selectedScanSource.config.watermark_column || "-"),
+                      })
+                    : t("dataIngestion.autoScan.databaseFullCheck")
+                  : t("dataIngestion.autoScan.databaseCustomSql")
+              }
+              showIcon
+              style={{ marginBottom: 16 }}
+              type="info"
+            />
+          ) : null}
           <Form.Item label={t("dataIngestion.autoScan.template")}>
             <Select
               onChange={(template_code) =>

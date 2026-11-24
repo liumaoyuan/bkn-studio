@@ -48,6 +48,8 @@ export const dataCatalogZhCN = {
     },
     resourceWorkspace: {
       currentResource: "当前资源",
+      openIngestionContract: "数据契约",
+      openIngestionProvenance: "入库溯源",
       tabDetail: "详情",
       tabPreview: "数据预览",
       tabIndex: "数据索引",

@@ -53,6 +53,31 @@ export interface DataIngestionDataSource {
   created_at: string;
 }
 
+export interface DataIngestionDatabaseTable {
+  name: string;
+  kind: "table" | "view";
+}
+
+export interface DataIngestionDatabaseColumn {
+  name: string;
+  type: string;
+  nullable: boolean;
+  primary_key: boolean;
+}
+
+export interface DataIngestionDatabaseCatalog {
+  schema_name: string;
+  tables: DataIngestionDatabaseTable[];
+  table_name: string;
+  columns: DataIngestionDatabaseColumn[];
+  primary_keys: string[];
+  recommended_watermark: string;
+  recommended_sync_mode: "full" | "incremental";
+  recommended_initial_cursor: string;
+  recommendation_reason: string;
+  generated_query: string;
+}
+
 export interface DataIngestionDataset {
   id: string;
   name: string;
@@ -176,6 +201,8 @@ export interface DataIngestionRun {
   original_name: string;
   file_type: string;
   media_type: string;
+  source_object: string;
+  source_context?: JsonObject | null;
   file_size: number;
   fingerprint: string;
   fetched_count: number;
@@ -183,6 +210,8 @@ export interface DataIngestionRun {
   updated_count: number;
   duplicate_count: number;
   error_count: number;
+  incremental_cursor_before: string;
+  incremental_cursor_after: string;
   error_message: string;
   started_at: string | null;
   finished_at: string | null;
@@ -192,7 +221,7 @@ export interface DataIngestionRun {
 
 export type DataIngestionRunListItem = Omit<
   DataIngestionRun,
-  "media_type" | "fingerprint" | "stages"
+  "media_type" | "fingerprint" | "source_context" | "stages"
 >;
 
 export interface DataIngestionDatasetRecord {
@@ -203,7 +232,87 @@ export interface DataIngestionDatasetRecord {
   data_type: string;
   payload: JsonObject;
   asset_path: string;
+  source_id: string | null;
+  source_object: string;
+  source_locator?: JsonObject | null;
+  stable_record_id: string;
   created_at: string;
+}
+
+export interface DataIngestionDatasetFieldSchema {
+  name: string;
+  data_type: string;
+  nullable: boolean;
+  present_count: number;
+  completeness: number;
+  sample_values: unknown[];
+  primary_key: boolean;
+}
+
+export interface DataIngestionDatasetSchema {
+  schema_version: string;
+  sampled_records: number;
+  total_records: number;
+  primary_key_fields: string[];
+  stable_key_strategy: "business_key" | "content_fingerprint";
+  fields: DataIngestionDatasetFieldSchema[];
+}
+
+export interface DataIngestionQualityIssue {
+  code: string;
+  severity: "warning" | "error";
+  field?: string;
+  message: string;
+}
+
+export interface DataIngestionQualityReport {
+  status: "passed" | "failed";
+  score: number;
+  scope: "sample";
+  sampled_records: number;
+  total_records: number;
+  field_count: number;
+  completeness: number;
+  duplicate_count: number;
+  error_count: number;
+  primary_key_fields: string[];
+  issues: DataIngestionQualityIssue[];
+}
+
+export interface DataIngestionQualityCheck {
+  id: string;
+  dataset_id: string;
+  status: "not_started" | "queued" | "running" | "completed" | "failed";
+  scope: "full";
+  total_records: number;
+  report: DataIngestionQualityReport | Record<string, never>;
+  error_message: string;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string | null;
+}
+
+export interface DataIngestionDatasetPublication {
+  dataset_id: string;
+  catalog_id: string;
+  resource_id: string;
+  status: string;
+  discovery_started: boolean;
+  last_error: string;
+  last_published_at: string | null;
+}
+
+export interface DataIngestionDatasetContract {
+  dataset: DataIngestionDataset;
+  schema: DataIngestionDatasetSchema;
+  quality: DataIngestionQualityReport;
+  publication: DataIngestionDatasetPublication;
+}
+
+export interface DataIngestionProvenanceBackfillResult {
+  dataset_id: string;
+  updated_records: number;
+  status: "completed";
 }
 
 export interface DataIngestionSheetPreview {
@@ -346,10 +455,22 @@ export interface DataIngestionAgentMessage {
   id: string;
   role: string;
   content: string;
+  attachments: DataIngestionAgentAttachment[];
   tool_calls: JsonObject[];
   tool_call_id: string;
   name: string;
   created_at: string;
+}
+
+export interface DataIngestionAgentAttachment {
+  id: string;
+  filename: string;
+  file_type: string;
+  media_type: string;
+  recommended_pipeline: string;
+  sha256: string;
+  size: number;
+  file_path: string;
 }
 
 export interface DataIngestionAgentApproval {
@@ -378,4 +499,48 @@ export interface DataIngestionAgentSessionDetail extends DataIngestionAgentSessi
   messages: DataIngestionAgentMessage[];
   approvals: DataIngestionAgentApproval[];
   memories: DataIngestionAgentMemory[];
+}
+
+export type DataIngestionAgentStreamEvent =
+  | {
+      type: "assistant_delta" | "content_delta" | "reasoning_delta";
+      content: string;
+      round: number;
+    }
+  | { type: "assistant_start"; round: number }
+  | {
+      type: "assistant_message";
+      round: number;
+      message: {
+        id: string;
+        role: "assistant";
+        content: string;
+        tool_calls: JsonObject[];
+      };
+    }
+  | {
+      type: "approval_resolved";
+      approval_id: string;
+      status: string;
+    }
+  | {
+      type: "approvals_created";
+      approvals: Array<{
+        id: string;
+        tool_name: string;
+        arguments: JsonObject;
+      }>;
+    }
+  | {
+      type: "done" | "error" | "status" | "tool_result" | "tool_start" | "user_message";
+      [key: string]: unknown;
+    }
+  | {
+      type: "session";
+      session: DataIngestionAgentSessionDetail;
+    };
+
+export interface DataIngestionAgentStreamResult {
+  error: string;
+  session: DataIngestionAgentSessionDetail | null;
 }

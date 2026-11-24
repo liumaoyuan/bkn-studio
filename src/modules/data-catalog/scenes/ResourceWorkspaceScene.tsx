@@ -5,7 +5,14 @@
  * Conditions. See LICENSE for the full text.
  */
 
-import { DatabaseOutlined, DeleteOutlined, KeyOutlined, ReloadOutlined } from "@ant-design/icons";
+import {
+  ApartmentOutlined,
+  DatabaseOutlined,
+  DeleteOutlined,
+  FileTextOutlined,
+  KeyOutlined,
+  ReloadOutlined,
+} from "@ant-design/icons";
 import { Alert, Space, Spin, Tabs } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -65,6 +72,21 @@ type ResourceWorkspaceSceneProps = {
   resourceId: string;
   tab: ResourceWorkspaceTab;
 };
+
+function parseIngestionDatasetResource(resourceId: string) {
+  const prefix = "data-ingestion:dataset:";
+  if (!resourceId.startsWith(prefix)) {
+    return null;
+  }
+  const [spaceId, datasetId] = resourceId
+    .slice(prefix.length)
+    .split(":")
+    .map((value) => decodeURIComponent(value));
+  if (!spaceId || !datasetId) {
+    return null;
+  }
+  return { datasetId, spaceId };
+}
 
 export function ResourceWorkspaceScene({
   indexView,
@@ -278,6 +300,9 @@ export function ResourceWorkspaceScene({
   const canViewResourceDetail = hasCatalogResourceOperation(resource, "view_detail");
   const canQueryResource = hasCatalogResourceOperation(resource, "query_data");
   const canAuthorizeResource = Boolean(!catalog?.builtin && canAuthorizeGrants);
+  const ingestionTarget = resource ? parseIngestionDatasetResource(resource.id) : null;
+  const canViewDataIngestion =
+    runtimeConfig.currentUser.permissions.includes("data_ingestion:view");
   // Internal catalogs do not support semantic-understanding tasks. Missing task permission is
   // handled inside the tab panel so the navigation remains discoverable and deep links stay valid.
   const hideSemanticUnderstanding = Boolean(catalog?.builtin);
@@ -537,6 +562,36 @@ export function ResourceWorkspaceScene({
             </div>
           </div>
           <Space className={styles.pageHeaderActions} wrap>
+            {ingestionTarget && canViewDataIngestion ? (
+              <>
+                <AppButton
+                  icon={<FileTextOutlined />}
+                  onClick={() => {
+                    const params = new URLSearchParams({
+                      dataset: ingestionTarget.datasetId,
+                      drawer: "contract",
+                      space: ingestionTarget.spaceId,
+                    });
+                    void navigate(`/data-ingestion/catalog?${params.toString()}`);
+                  }}
+                >
+                  {t("dataCatalog.resourceWorkspace.openIngestionContract")}
+                </AppButton>
+                <AppButton
+                  icon={<ApartmentOutlined />}
+                  onClick={() => {
+                    const params = new URLSearchParams({
+                      dataset: ingestionTarget.datasetId,
+                      drawer: "provenance",
+                      space: ingestionTarget.spaceId,
+                    });
+                    void navigate(`/data-ingestion/catalog?${params.toString()}`);
+                  }}
+                >
+                  {t("dataCatalog.resourceWorkspace.openIngestionProvenance")}
+                </AppButton>
+              </>
+            ) : null}
             {canManageCatalogTasks &&
             resource.category !== "logical_view" &&
             resource.category !== "dataset" ? (

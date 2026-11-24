@@ -1282,6 +1282,18 @@ describe("resource.service · mock update boundaries", () => {
     expect(resource?.operations).toEqual(["view_detail", "query_data", "delete"]);
   });
 
+  it("lists mock catalog resources without calling live ingestion APIs", async () => {
+    getMock.mockReset();
+    const { listCatalogResourcePage } =
+      await import("@/modules/data-catalog/services/resource.service");
+
+    const page = await listCatalogResourcePage({ catalogId: "cat-001", limit: 10, offset: 0 });
+
+    expect(page.total).toBeGreaterThan(0);
+    expect(page.items.map((resource) => resource.id)).toContain("res-customers");
+    expect(getMock).not.toHaveBeenCalled();
+  });
+
   it("grants delete on newly created index resources in mock mode", async () => {
     const { createCatalogResource, deleteCatalogResource } =
       await import("@/modules/data-catalog/services/resource.service");
