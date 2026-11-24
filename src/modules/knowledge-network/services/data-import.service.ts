@@ -95,6 +95,8 @@ export type DataImportStats = {
 
 export type DataImportIssue = { row: number; field?: string; message: string };
 
+export type DataImportSourceKind = "file" | "dataset" | "table";
+
 export type DataImportWriteMode = "replace" | "upsert";
 
 export type DataImportWriteOptions = {
@@ -408,4 +410,65 @@ export async function runDataConnectionImport(input: {
     },
   );
   return payload.report;
+}
+
+export type DataProvenanceField = {
+  propertyName: string;
+  sourceColumn?: string;
+  type?: string;
+  mapped?: boolean;
+};
+
+export type DataProvenanceObject = {
+  objectTypeId: string;
+  objectTypeName: string;
+  resourceId?: string;
+  resourceName?: string;
+  bound: boolean;
+  sourceLabel?: string;
+  sourceKind?: DataImportSourceKind;
+  sourceName?: string;
+  importedAt?: string;
+  writeMode?: DataImportWriteMode;
+  written?: number;
+  fields: DataProvenanceField[];
+};
+
+export type DataProvenanceBatch = {
+  sourceLabel: string;
+  sourceKind?: DataImportSourceKind;
+  sourceName?: string;
+  writeMode?: DataImportWriteMode;
+  finishedAt?: string;
+  elapsedMs?: number;
+  written: number;
+  failed: number;
+  objects: Array<{ objectTypeName: string; written: number; failed: number }>;
+  relations: Array<{ relationTypeName: string; edgeCount: number }>;
+};
+
+export type DataProvenanceRelation = {
+  relationTypeId: string;
+  relationTypeName: string;
+  sourceObjectTypeId?: string;
+  targetObjectTypeId?: string;
+  sourceProperty?: string;
+  targetProperty?: string;
+  edgeCount?: number;
+};
+
+export type DataProvenance = {
+  networkId: string;
+  generatedAt: string;
+  objects: DataProvenanceObject[];
+  batches: DataProvenanceBatch[];
+  relations: DataProvenanceRelation[];
+};
+
+export async function getDataProvenance(networkId: string): Promise<DataProvenance> {
+  const payload = await requestJson<{ ok: boolean; provenance: DataProvenance }>(
+    `/api/copilot/data/provenance?networkId=${encodeURIComponent(networkId)}`,
+    { headers: withAuthOnly() },
+  );
+  return payload.provenance;
 }

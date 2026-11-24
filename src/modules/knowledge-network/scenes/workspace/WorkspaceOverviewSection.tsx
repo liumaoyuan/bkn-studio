@@ -6,6 +6,7 @@
  */
 
 import {
+  ApartmentOutlined,
   ApiOutlined,
   ClockCircleOutlined,
   CopyOutlined,
@@ -34,6 +35,7 @@ import { TablePaginationBar } from "@/framework/ui/common/TablePaginationBar";
 import { hasKnowledgeNetworkRecordOperation } from "@/modules/knowledge-network/utils/record-operations";
 import { ObjectAuthorizeDrawer } from "@/modules/system-admin/components/ObjectAuthorizeDrawer";
 import { DataImportWizard } from "@/modules/knowledge-network/components/data-import/DataImportWizard";
+import { DataProvenanceDrawer } from "@/modules/knowledge-network/components/data-import/DataProvenanceDrawer";
 import { OverviewOntologyBlock } from "@/modules/knowledge-network/components/preview/OverviewOntologyBlock";
 import { MarkdownText } from "@/framework/ui/common/MarkdownText";
 import { renderResourceIcon } from "@/modules/knowledge-network/components/shared/ResourceIconSelect";
@@ -74,6 +76,7 @@ export function WorkspaceOverviewSection({
   const { message } = useAppServices();
   const [authorizeOpen, setAuthorizeOpen] = useState(false);
   const [dataImportOpen, setDataImportOpen] = useState(false);
+  const [provenanceOpen, setProvenanceOpen] = useState(false);
   // Judged on the record's own operations, not on a platform permission point. bkn-backend writes
   // `authorize` to whoever created the network, so this is what "I made it, I may share it" looks
   // like; admin-authz:grant is a platform-administrator capability that a builder never holds, and
@@ -192,6 +195,11 @@ export function WorkspaceOverviewSection({
               {extensionWorkspaceActions().map((action) => (
                 <ExtensionActionButton action={action} key={action.key} networkId={networkId} />
               ))}
+              {detail ? (
+                <AppButton icon={<ApartmentOutlined />} onClick={() => setProvenanceOpen(true)}>
+                  {t("knowledgeNetwork.dataProvenanceTitle")}
+                </AppButton>
+              ) : null}
               {detail && canModify ? (
                 <AppButton icon={<ImportOutlined />} onClick={() => setDataImportOpen(true)}>
                   {t("knowledgeNetwork.dataImportTitle")}
@@ -377,6 +385,14 @@ export function WorkspaceOverviewSection({
           </div>
         ) : null}
       </div>
+
+      {detail ? (
+        <DataProvenanceDrawer
+          networkId={networkId}
+          onClose={() => setProvenanceOpen(false)}
+          open={provenanceOpen}
+        />
+      ) : null}
 
       {detail ? (
         <DataImportWizard
