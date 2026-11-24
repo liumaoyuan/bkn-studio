@@ -294,6 +294,8 @@ export const networkPart = {
   dataImportStatsDocuments: "生成 {{count}} 条文档",
   dataImportStatsSkipped: "跳过 {{count}} 条",
   dataImportWarnings: "映射提示",
+  dataImportPreferredHint:
+    "检测到多个对象类都能匹配这份数据，已默认只勾选字段匹配最多的一个；如需写入其它对象类，请手动勾选。",
   dataImportIssues: "数据问题（前 5 条）",
   dataImportIssueRow: "第 {{row}} 行：",
   dataImportObjectType: "对象类",

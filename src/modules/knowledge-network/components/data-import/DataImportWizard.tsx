@@ -85,6 +85,7 @@ export function DataImportWizard({ networkId, onClose, onImported, open }: DataI
   const [error, setError] = useState("");
   const [preview, setPreview] = useState<DataImportPreview | null>(null);
   const [excluded, setExcluded] = useState<Record<string, boolean>>({});
+  const [preferredHint, setPreferredHint] = useState(false);
   const [propertyNames, setPropertyNames] = useState<Record<string, Record<string, string>>>({});
   const [report, setReport] = useState<DataImportReport | null>(null);
   const [writeMode, setWriteMode] = useState<DataImportWriteMode>("replace");
@@ -108,6 +109,7 @@ export function DataImportWizard({ networkId, onClose, onImported, open }: DataI
     setReport(null);
     setError("");
     setExcluded({});
+    setPreferredHint(false);
     setPropertyNames({});
     setWriteMode("replace");
     setWatermarkField("");
@@ -200,8 +202,18 @@ export function DataImportWizard({ networkId, onClose, onImported, open }: DataI
     setPreview(source);
     const nextExcluded: Record<string, boolean> = {};
     const nextPropertyNames: Record<string, Record<string, string>> = {};
+    const maxFields = source.mapping.objects.reduce(
+      (max, objectMapping) => Math.max(max, objectMapping.fields.length),
+      0,
+    );
+    let hiddenMatches = 0;
     for (const objectMapping of source.mapping.objects) {
-      nextExcluded[objectMapping.objectTypeId] = objectMapping.fields.length === 0;
+      const preferred =
+        objectMapping.fields.length > 0 && objectMapping.fields.length === maxFields;
+      nextExcluded[objectMapping.objectTypeId] = !preferred;
+      if (!preferred && objectMapping.fields.length > 0) {
+        hiddenMatches += 1;
+      }
       const fieldNames: Record<string, string> = {};
       for (const field of objectMapping.fields) {
         fieldNames[field.sourceColumn] = field.propertyName;
@@ -210,6 +222,7 @@ export function DataImportWizard({ networkId, onClose, onImported, open }: DataI
     }
     setExcluded(nextExcluded);
     setPropertyNames(nextPropertyNames);
+    setPreferredHint(hiddenMatches > 0);
     setStep(1);
   };
 
@@ -785,6 +798,14 @@ export function DataImportWizard({ networkId, onClose, onImported, open }: DataI
               message={t("knowledgeNetwork.dataImportWarnings")}
               showIcon
               type="warning"
+            />
+          ) : null}
+          {preferredHint ? (
+            <Alert
+              className={styles.alert}
+              message={t("knowledgeNetwork.dataImportPreferredHint")}
+              showIcon
+              type="info"
             />
           ) : null}
           <div style={{ marginBottom: 12 }}>

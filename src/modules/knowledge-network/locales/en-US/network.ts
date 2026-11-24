@@ -310,6 +310,8 @@ export const networkPart = {
   dataImportStatsDocuments: "{{count}} documents generated",
   dataImportStatsSkipped: "{{count}} skipped",
   dataImportWarnings: "Mapping hints",
+  dataImportPreferredHint:
+    "Multiple object types match this data. Only the best-matching one is selected by default; tick others manually if needed.",
   dataImportIssues: "Data issues (first 5)",
   dataImportIssueRow: "Row {{row}}: ",
   dataImportObjectType: "Object type",
