@@ -8,6 +8,7 @@
 import type { AxiosRequestConfig } from "axios";
 
 import { http } from "@/framework/request/http";
+import { getRuntimeConfig } from "@/framework/runtime/config";
 import {
   sanitizeDownloadFilename,
   triggerBrowserDownload,
@@ -16,6 +17,8 @@ import type {
   DataIngestionAgentManifest,
   DataIngestionAgentSession,
   DataIngestionAgentSessionDetail,
+  DataIngestionAgentStreamEvent,
+  DataIngestionAgentStreamResult,
   DataIngestionAgentSkill,
   DataIngestionAgentStatus,
   DataIngestionAutoScanJob,
@@ -24,14 +27,21 @@ import type {
   DataIngestionControlDatabaseTestResult,
   DataIngestionCustomMcpTool,
   DataIngestionCustomSkill,
+  DataIngestionDatabaseCatalog,
   DataIngestionDataSource,
   DataIngestionDataset,
+  DataIngestionDatasetContract,
+  DataIngestionDatasetPublication,
   DataIngestionDatasetRecord,
+  DataIngestionDatasetSchema,
+  DataIngestionQualityReport,
   DataIngestionInspection,
   DataIngestionOverview,
   DataIngestionPipelineTemplate,
   DataIngestionPipelineRunResult,
   DataIngestionPipelineExecution,
+  DataIngestionProvenanceBackfillResult,
+  DataIngestionQualityCheck,
   DataIngestionRun,
   DataIngestionRunListItem,
   DataIngestionSpace,
@@ -67,6 +77,117 @@ const scopedHttp = {
   delete: <T = unknown>(url: string, config?: AxiosRequestConfig) =>
     http.delete<T>(url, scopedConfig(config)),
 };
+
+async function openAgentStream(path: string, init: RequestInit, retry = true): Promise<Response> {
+  if (!activeDataSpaceId) {
+    throw new Error("请选择数据空间");
+  }
+  const runtimeConfig = getRuntimeConfig();
+  const token = runtimeConfig.auth.tokenManager.getAccessToken();
+  const baseUrl = runtimeConfig.apiBaseUrl.replace(/\/$/, "");
+  const headers = new Headers(init.headers);
+  headers.set("Accept", "text/event-stream");
+  headers.set("Accept-Language", runtimeConfig.locale);
+  headers.set("x-data-ingestion-space", activeDataSpaceId);
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+  const response = await fetch(`${baseUrl}${PREFIX}${path}`, {
+    ...init,
+    credentials: "include",
+    headers,
+  });
+  if (response.status === 401 && retry) {
+    try {
+      const refreshedToken = await runtimeConfig.auth.tokenManager.refreshAccessToken();
+      if (refreshedToken) {
+        return openAgentStream(path, init, false);
+      }
+    } catch {
+      runtimeConfig.auth.tokenManager.onAuthFailure?.();
+    }
+    runtimeConfig.auth.tokenManager.onAuthFailure?.();
+  }
+  if (!response.ok) {
+    const body = await response.text();
+    let detail = body;
+    try {
+      const parsed = JSON.parse(body) as { detail?: unknown; message?: unknown };
+      detail = String(parsed.detail ?? parsed.message ?? body);
+    } catch {
+      // Keep the original response body.
+    }
+    throw new Error(detail || `HTTP ${response.status}`);
+  }
+  return response;
+}
+
+async function* readAgentStream(response: Response): AsyncGenerator<DataIngestionAgentStreamEvent> {
+  if (!response.body) {
+    throw new Error("流式响应不可用");
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  function parseBlock(block: string): DataIngestionAgentStreamEvent | null {
+    const data = block
+      .split(/\r?\n/)
+      .filter((line) => line.startsWith("data:"))
+      .map((line) => line.slice(5).trimStart())
+      .join("\n");
+    if (!data) {
+      return null;
+    }
+    return JSON.parse(data) as DataIngestionAgentStreamEvent;
+  }
+
+  while (true) {
+    const { done, value } = await reader.read();
+    buffer += decoder.decode(value, { stream: !done });
+    let boundary = buffer.search(/\r?\n\r?\n/);
+    while (boundary >= 0) {
+      const block = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + (buffer[boundary] === "\r" ? 4 : 2));
+      const event = parseBlock(block);
+      if (event) {
+        yield event;
+      }
+      boundary = buffer.search(/\r?\n\r?\n/);
+    }
+    if (done) {
+      const event = parseBlock(buffer);
+      if (event) {
+        yield event;
+      }
+      break;
+    }
+  }
+}
+
+async function consumeAgentStream(
+  response: Response,
+  onEvent: (event: DataIngestionAgentStreamEvent) => void,
+): Promise<DataIngestionAgentStreamResult> {
+  let session: DataIngestionAgentSessionDetail | null = null;
+  let error = "";
+  for await (const event of readAgentStream(response)) {
+    onEvent(event);
+    const eventSession = "session" in event ? event.session : null;
+    if (
+      eventSession &&
+      typeof eventSession === "object" &&
+      "messages" in eventSession &&
+      "approvals" in eventSession
+    ) {
+      session = eventSession as DataIngestionAgentSessionDetail;
+    }
+    if (event.type === "error") {
+      error = String(event.message || "Agent 执行失败");
+    }
+  }
+  return { error, session };
+}
 
 export const dataIngestionService = {
   getControlDatabaseStatus: () =>
@@ -127,6 +248,16 @@ export const dataIngestionService = {
       )
       .then((r) => r.data),
 
+  inspectSourceDatabase: (payload: {
+    source_id?: string;
+    source_type: string;
+    config: Record<string, unknown>;
+    table_name?: string;
+  }) =>
+    scopedHttp
+      .post<DataIngestionDatabaseCatalog>(`${PREFIX}/sources/database-catalog`, payload)
+      .then((r) => r.data),
+
   deleteSource: (sourceId: string) =>
     scopedHttp.delete(`${PREFIX}/sources/${encodeURIComponent(sourceId)}`),
 
@@ -168,6 +299,65 @@ export const dataIngestionService = {
 
   deleteDataset: (datasetId: string) =>
     scopedHttp.delete(`${PREFIX}/datasets/${encodeURIComponent(datasetId)}`),
+
+  getDatasetSchema: (datasetId: string, sampleSize = 200) =>
+    scopedHttp
+      .get<DataIngestionDatasetSchema>(
+        `${PREFIX}/datasets/${encodeURIComponent(datasetId)}/schema`,
+        { params: { sample_size: sampleSize } },
+      )
+      .then((r) => r.data),
+
+  getDatasetQuality: (datasetId: string, sampleSize = 200) =>
+    scopedHttp
+      .get<DataIngestionQualityReport>(
+        `${PREFIX}/datasets/${encodeURIComponent(datasetId)}/quality`,
+        { params: { sample_size: sampleSize } },
+      )
+      .then((r) => r.data),
+
+  startFullDatasetQualityCheck: (datasetId: string) =>
+    scopedHttp
+      .post<DataIngestionQualityCheck>(
+        `${PREFIX}/datasets/${encodeURIComponent(datasetId)}/quality-checks`,
+      )
+      .then((r) => r.data),
+
+  getLatestFullDatasetQualityCheck: (datasetId: string) =>
+    scopedHttp
+      .get<DataIngestionQualityCheck>(
+        `${PREFIX}/datasets/${encodeURIComponent(datasetId)}/quality-checks/latest`,
+      )
+      .then((r) => r.data),
+
+  backfillDatasetProvenance: (datasetId: string) =>
+    scopedHttp
+      .post<DataIngestionProvenanceBackfillResult>(
+        `${PREFIX}/datasets/${encodeURIComponent(datasetId)}/provenance/backfill`,
+      )
+      .then((r) => r.data),
+
+  getDatasetContract: (datasetId: string, sampleSize = 200) =>
+    scopedHttp
+      .get<DataIngestionDatasetContract>(
+        `${PREFIX}/datasets/${encodeURIComponent(datasetId)}/contract`,
+        { params: { sample_size: sampleSize } },
+      )
+      .then((r) => r.data),
+
+  getDatasetPublication: (datasetId: string) =>
+    scopedHttp
+      .get<DataIngestionDatasetPublication>(
+        `${PREFIX}/datasets/${encodeURIComponent(datasetId)}/publication`,
+      )
+      .then((r) => r.data),
+
+  publishDataset: (datasetId: string) =>
+    scopedHttp
+      .post<DataIngestionDatasetPublication>(
+        `${PREFIX}/datasets/${encodeURIComponent(datasetId)}/publish`,
+      )
+      .then((r) => r.data),
 
   listTemplates: () =>
     scopedHttp.get<DataIngestionPipelineTemplate[]>(`${PREFIX}/templates`).then((r) => r.data),
@@ -415,6 +605,18 @@ export const dataIngestionService = {
         triggerBrowserDownload(response.data, sanitizeDownloadFilename(filename, `run-${runId}`));
       }),
 
+  getRunAssetBlob: (runId: string) =>
+    scopedHttp
+      .get<Blob>(`${PREFIX}/runs/${encodeURIComponent(runId)}/asset`, { responseType: "blob" })
+      .then((response) => response.data),
+
+  getRunAssetPreview: (runId: string) =>
+    scopedHttp
+      .get<Blob>(`${PREFIX}/runs/${encodeURIComponent(runId)}/asset/preview`, {
+        responseType: "blob",
+      })
+      .then((response) => response.data),
+
   listRecords: (datasetId: string, params?: { page?: number; pageSize?: number; query?: string }) =>
     scopedHttp
       .get<{
@@ -448,6 +650,45 @@ export const dataIngestionService = {
     scopedHttp
       .post<DataIngestionAutoScanJob>(`${PREFIX}/auto-scan/jobs/${jobId}/run`)
       .then((r) => r.data),
+
+  runSourceIngestion: async (payload: {
+    datasetId: string;
+    name: string;
+    path?: string;
+    scanType: string;
+    sourceId: string;
+    templateCode: string;
+  }) => {
+    const job = await scopedHttp
+      .post<DataIngestionAutoScanJob>(`${PREFIX}/auto-scan/jobs`, {
+        dataset_id: payload.datasetId,
+        enabled: true,
+        file_pattern: "*",
+        interval_seconds: 86_400,
+        name: payload.name,
+        path: payload.path || "",
+        recursive: false,
+        scan_type: payload.scanType,
+        source_id: payload.sourceId,
+        template_code: payload.templateCode,
+      })
+      .then((response) => response.data);
+    try {
+      const completedJob = await scopedHttp
+        .post<DataIngestionAutoScanJob>(`${PREFIX}/auto-scan/jobs/${job.id}/run`)
+        .then((response) => response.data);
+      const run = completedJob.last_run_id
+        ? await scopedHttp
+            .get<DataIngestionRun>(`${PREFIX}/runs/${encodeURIComponent(completedJob.last_run_id)}`)
+            .then((response) => response.data)
+        : null;
+      return { job: completedJob, run };
+    } finally {
+      await scopedHttp
+        .delete<{ deleted: boolean }>(`${PREFIX}/auto-scan/jobs/${job.id}`)
+        .catch(() => undefined);
+    }
+  },
 
   deleteScanJob: (jobId: string) =>
     scopedHttp.delete<{ deleted: boolean }>(`${PREFIX}/auto-scan/jobs/${jobId}`),
@@ -557,6 +798,50 @@ export const dataIngestionService = {
       })
       .then((r) => r.data),
 
+  streamAgentMessage: async (
+    sessionId: string,
+    content: string,
+    onEvent: (event: DataIngestionAgentStreamEvent) => void,
+  ) => {
+    const response = await openAgentStream(`/agent/sessions/${sessionId}/messages/stream`, {
+      body: JSON.stringify({ content }),
+      headers: { "Content-Type": "application/json" },
+      method: "POST",
+    });
+    return consumeAgentStream(response, onEvent);
+  },
+
+  sendAgentMessageWithAttachment: (sessionId: string, content: string, file: File) => {
+    const body = new FormData();
+    body.append("content", content);
+    body.append("file", file);
+    return scopedHttp
+      .post<DataIngestionAgentSessionDetail>(
+        `${PREFIX}/agent/sessions/${sessionId}/messages/attachment`,
+        body,
+      )
+      .then((r) => r.data);
+  },
+
+  streamAgentMessageWithAttachment: async (
+    sessionId: string,
+    content: string,
+    file: File,
+    onEvent: (event: DataIngestionAgentStreamEvent) => void,
+  ) => {
+    const body = new FormData();
+    body.append("content", content);
+    body.append("file", file);
+    const response = await openAgentStream(
+      `/agent/sessions/${sessionId}/messages/attachment/stream`,
+      {
+        body,
+        method: "POST",
+      },
+    );
+    return consumeAgentStream(response, onEvent);
+  },
+
   approveAgentTool: (sessionId: string, approvalId: string, reason: string) =>
     scopedHttp
       .post<DataIngestionAgentSessionDetail>(
@@ -565,6 +850,23 @@ export const dataIngestionService = {
       )
       .then((r) => r.data),
 
+  streamApproveAgentTool: async (
+    sessionId: string,
+    approvalId: string,
+    reason: string,
+    onEvent: (event: DataIngestionAgentStreamEvent) => void,
+  ) => {
+    const response = await openAgentStream(
+      `/agent/sessions/${sessionId}/approvals/${approvalId}/approve/stream`,
+      {
+        body: JSON.stringify({ reason }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      },
+    );
+    return consumeAgentStream(response, onEvent);
+  },
+
   rejectAgentTool: (sessionId: string, approvalId: string, reason: string) =>
     scopedHttp
       .post<DataIngestionAgentSessionDetail>(
@@ -572,6 +874,23 @@ export const dataIngestionService = {
         { reason },
       )
       .then((r) => r.data),
+
+  streamRejectAgentTool: async (
+    sessionId: string,
+    approvalId: string,
+    reason: string,
+    onEvent: (event: DataIngestionAgentStreamEvent) => void,
+  ) => {
+    const response = await openAgentStream(
+      `/agent/sessions/${sessionId}/approvals/${approvalId}/reject/stream`,
+      {
+        body: JSON.stringify({ reason }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      },
+    );
+    return consumeAgentStream(response, onEvent);
+  },
 
   addAgentMemory: (sessionId: string, key: string, value: string) =>
     scopedHttp.post(`${PREFIX}/agent/sessions/${sessionId}/memories`, { key, value }),

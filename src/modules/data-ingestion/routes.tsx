@@ -77,7 +77,7 @@ export const dataIngestionRoutes: RouteObject[] = [
   {
     path: "data-ingestion/catalog",
     handle: handle(pageHandles.catalog),
-    element: page(<Navigate replace to="/data-catalog/catalog/data-ingestion" />),
+    element: page(<DataIngestionPage activeView="catalog" />),
   },
   {
     path: "data-ingestion/auto-scan",

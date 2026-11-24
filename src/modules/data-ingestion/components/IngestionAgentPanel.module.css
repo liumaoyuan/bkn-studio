@@ -80,6 +80,14 @@
   background: var(--ant-color-bg-container);
 }
 
+.sessionList :global(.ant-list-item).sessionRow {
+  cursor: pointer;
+  transition:
+    border-color 0.18s ease,
+    background 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
 .sessionList :global(.ant-list-item:hover) {
   border-color: var(--ant-color-primary-border);
   background: var(--ant-color-primary-bg);
@@ -89,6 +97,12 @@
   border-color: var(--ant-color-primary);
   box-shadow: inset 3px 0 0 var(--ant-color-primary);
   background: var(--ant-color-primary-bg);
+}
+
+.sessionList :global(.ant-list-item)[data-loading="true"] {
+  border-color: var(--ant-color-primary);
+  background: var(--ant-color-primary-bg);
+  box-shadow: 0 0 0 2px var(--ant-color-primary-bg);
 }
 
 .modelStatus {
@@ -150,63 +164,252 @@
 }
 
 .chatPanel {
+  min-height: 420px;
   max-height: 560px;
-  padding: 18px;
+  padding: 20px 18px;
   overflow-y: auto;
-  border: 1px solid var(--ant-color-border-secondary);
-  border-radius: 14px;
   background:
-    linear-gradient(180deg, var(--ant-color-fill-quaternary), transparent 180px),
+    radial-gradient(circle at top, var(--ant-color-primary-bg), transparent 320px),
     var(--ant-color-bg-container);
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 16px;
+  scroll-behavior: smooth;
 }
 
-.messageCard {
-  margin-bottom: 12px;
+.messageRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 18px;
 }
 
-.messageUser {
-  margin-left: 16%;
+.messageRow[data-role="user"] {
+  flex-direction: row-reverse;
+}
+
+.messageAvatar {
+  display: grid;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 10px;
+  background: var(--ant-color-bg-container);
+  color: var(--ant-color-primary);
+  font-size: 16px;
+}
+
+.messageRow[data-role="user"] .messageAvatar {
+  background: var(--ant-color-primary);
+  color: var(--ant-color-text-light-solid);
+}
+
+.messageBubble {
+  max-width: min(82%, 920px);
+  padding: 12px 14px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 4px 14px 14px;
+  background: var(--ant-color-bg-container);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 3%);
+}
+
+.messageRow[data-role="user"] .messageBubble {
   border-color: var(--ant-color-primary-border);
+  border-radius: 14px 4px 14px 14px;
   background: var(--ant-color-primary-bg);
 }
 
-.messageAgent {
-  margin-right: 8%;
+.messageRow[data-role="tool"] .messageBubble {
+  background: var(--ant-color-fill-quaternary);
+}
+
+.messageMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.messageRow[data-role="user"] .messageMeta {
+  justify-content: flex-end;
 }
 
 .messageText {
-  margin-bottom: 0;
+  font-size: 14px;
+  line-height: 1.75;
   white-space: pre-wrap;
 }
 
-.composer {
-  margin-top: 16px;
-  padding: 12px;
+.toolResult {
+  max-height: 260px;
+  margin: 0;
+  padding: 10px 12px;
+  overflow: auto;
   border: 1px solid var(--ant-color-border-secondary);
-  border-radius: 14px;
+  border-radius: 10px;
   background: var(--ant-color-bg-container);
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+.messageAttachments {
+  margin-top: 10px;
+}
+
+.streamProgress {
+  margin: 4px 0 16px 42px;
+  padding: 12px 14px;
+  border: 1px solid var(--ant-color-primary-border);
+  border-radius: 12px;
+  background: var(--ant-color-primary-bg);
+}
+
+.streamStatus {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ant-color-text-secondary);
+  font-size: 13px;
+}
+
+.streamPulse {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 8px;
+  border-radius: 50%;
+  background: var(--ant-color-primary);
+  box-shadow: 0 0 0 0 var(--ant-color-primary-border);
+  animation: streamPulse 1.4s ease-out infinite;
+}
+
+.reasoningPanel {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--ant-color-primary-border);
+}
+
+.reasoningLabel {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.reasoningText {
+  max-height: 220px;
+  overflow-y: auto;
+  color: var(--ant-color-text-secondary);
+  font-size: 12px;
+}
+
+@keyframes streamPulse {
+  0% {
+    box-shadow: 0 0 0 0 var(--ant-color-primary-border);
+  }
+
+  70% {
+    box-shadow: 0 0 0 8px transparent;
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+.composer {
+  position: sticky;
+  z-index: 2;
+  bottom: 0;
+  margin-top: 18px;
+  padding: 16px;
+  border: 2px solid var(--ant-color-primary-border);
+  border-radius: 16px;
+  background:
+    linear-gradient(135deg, var(--ant-color-primary-bg), transparent 55%),
+    var(--ant-color-bg-container);
+  box-shadow: 0 10px 28px rgb(0 0 0 / 8%);
   transition:
     border-color 0.2s ease,
     box-shadow 0.2s ease;
 }
 
 .composer:focus-within {
-  border-color: var(--ant-color-primary-border);
-  box-shadow: 0 0 0 3px var(--ant-color-primary-bg);
+  border-color: var(--ant-color-primary);
+  box-shadow:
+    0 0 0 4px var(--ant-color-primary-bg),
+    0 12px 32px rgb(0 0 0 / 10%);
+}
+
+.composerHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.composerHeading > :global(.ant-space) {
+  align-items: flex-start;
+}
+
+.composerHeading > :global(.ant-space) > :global(.ant-space-item:last-child) > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.composerIcon {
+  display: grid;
+  flex: 0 0 30px;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--ant-color-primary);
+  color: var(--ant-color-text-light-solid);
+}
+
+.composerSubtitle {
+  font-size: 12px;
 }
 
 .composerInput {
-  border: 0;
-  background: transparent;
-  box-shadow: none;
+  padding: 12px 14px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 12px;
+  background: var(--ant-color-bg-container);
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 3%);
+  font-size: 15px;
+  line-height: 1.7;
   resize: none;
 }
 
 .composerInput:focus,
 .composerInput:hover {
-  border: 0;
-  background: transparent;
-  box-shadow: none;
+  border-color: var(--ant-color-primary);
+  background: var(--ant-color-bg-container);
+}
+
+.composerInput:disabled {
+  background: var(--ant-color-fill-quaternary);
+}
+
+.composerAttachments {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.composerAttachments :global(.ant-tag) {
+  max-width: min(420px, 100%);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .composerFooter {
@@ -214,12 +417,17 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-top: 10px;
+  margin-top: 12px;
 }
 
 .composerFooter :global(.ant-typography) {
   min-width: 0;
   line-height: 1.45;
+}
+
+.keyboardHint {
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .sectionBlock {
@@ -319,17 +527,54 @@
   background: var(--ant-color-warning-bg);
 }
 
+.approvalHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.approvalReason {
+  display: block;
+  margin-top: 6px;
+}
+
+.approvalDetails {
+  margin-top: 10px;
+  border: 1px solid var(--ant-color-warning-border);
+  border-radius: 10px;
+  background: var(--ant-color-bg-container);
+}
+
+.approvalDetails summary {
+  padding: 8px 10px;
+  cursor: pointer;
+  color: var(--ant-color-text-secondary);
+  font-size: 12px;
+}
+
+.approvalDetails pre {
+  max-height: 220px;
+  margin: 0;
+  padding: 10px;
+  overflow: auto;
+  border-top: 1px solid var(--ant-color-warning-border);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.approvalActions {
+  margin-top: 12px;
+}
+
 @media (max-width: 900px) {
   .toolGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .messageUser {
-    margin-left: 6%;
-  }
-
-  .messageAgent {
-    margin-right: 0;
+  .messageBubble {
+    max-width: 90%;
   }
 }
 
@@ -347,7 +592,20 @@
     flex-direction: column;
   }
 
-  .composerFooter :global(.ant-btn) {
+  .composerFooter > :global(.ant-space) {
+    justify-content: space-between;
     width: 100%;
+  }
+
+  .composerFooter :global(.ant-btn) {
+    margin-left: auto;
+  }
+
+  .composerHeading {
+    flex-direction: column;
+  }
+
+  .messageBubble {
+    max-width: calc(100% - 42px);
   }
 }

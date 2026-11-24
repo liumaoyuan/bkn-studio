@@ -50,6 +50,8 @@ export const dataCatalogEnUS = {
     },
     resourceWorkspace: {
       currentResource: "Current Resource",
+      openIngestionContract: "Data Contract",
+      openIngestionProvenance: "Ingestion Provenance",
       tabDetail: "Detail",
       tabPreview: "Data Preview",
       tabIndex: "Data Index",
