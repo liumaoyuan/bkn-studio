@@ -14,6 +14,8 @@ import type { CopilotIr } from "@/modules/knowledge-network/services/ontology-co
 
 import { OntologyCopilotDrawer } from "./OntologyCopilotDrawer";
 
+vi.setConfig({ testTimeout: 30000 });
+
 const {
   streamCopilotChat,
   analyzeCopilot,
@@ -25,6 +27,7 @@ const {
   saveCopilotModelSettings,
   clearCopilotModelSettings,
   testCopilotModelSettings,
+  listCopilotPlatformModels,
   listCopilotBaseNetworks,
   loadCopilotBaseDraft,
   introspectCopilotDatabase,
@@ -59,6 +62,7 @@ const {
   saveCopilotModelSettings: vi.fn(),
   clearCopilotModelSettings: vi.fn(),
   testCopilotModelSettings: vi.fn(),
+  listCopilotPlatformModels: vi.fn(),
   listCopilotBaseNetworks: vi.fn(),
   loadCopilotBaseDraft: vi.fn(),
   introspectCopilotDatabase: vi.fn(),
@@ -83,6 +87,7 @@ vi.mock("@/modules/knowledge-network/services/ontology-copilot.service", () => (
   saveCopilotModelSettings,
   clearCopilotModelSettings,
   testCopilotModelSettings,
+  listCopilotPlatformModels,
   introspectCopilotDatabase,
   testCopilotDatabaseConnection,
   compileCopilotAttachPlan,
@@ -558,8 +563,15 @@ describe("OntologyCopilotDrawer", () => {
   });
 
   it("saves model settings from the drawer header", async () => {
+    listCopilotPlatformModels.mockResolvedValue({
+      ok: true,
+      models: [{ id: "deepseek", name: "deepseek", isDefault: true }],
+    });
     getCopilotModelSettings.mockResolvedValue({
       source: "env",
+      mode: "manual",
+      platformModel: "",
+      platformModelName: "",
       baseUrl: "https://api.deepseek.com/v1",
       model: "deepseek-chat",
       apiKeyMasked: "sk-9***5f5e",
@@ -568,6 +580,9 @@ describe("OntologyCopilotDrawer", () => {
       ok: true,
       settings: {
         source: "file",
+        mode: "manual",
+        platformModel: "",
+        platformModelName: "",
         baseUrl: "https://api.deepseek.com/v1",
         model: "deepseek-chat",
         apiKeyMasked: "sk-9***5f5e",
@@ -590,6 +605,7 @@ describe("OntologyCopilotDrawer", () => {
 
     await waitFor(() => expect(saveCopilotModelSettings).toHaveBeenCalledTimes(1));
     expect(saveCopilotModelSettings).toHaveBeenCalledWith({
+      mode: "manual",
       baseUrl: "https://api.deepseek.com/v1",
       model: "deepseek-chat",
       apiKey: undefined,

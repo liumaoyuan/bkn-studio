@@ -6,6 +6,17 @@
  */
 
 import { http } from "@/framework/request/http";
+import { getStoredAccessToken } from "@/framework/auth/token-store";
+
+/** 平台模型模式下，copilot 请求需要带上当前登录用户的令牌。 */
+function withAuthHeaders(extra?: Record<string, string>): Record<string, string> {
+  const headers: Record<string, string> = { ...(extra ?? {}) };
+  const token = getStoredAccessToken();
+  if (token) {
+    headers.authorization = `Bearer ${token}`;
+  }
+  return headers;
+}
 
 export type CopilotChatMessage = {
   role: "user" | "assistant";
@@ -212,17 +223,33 @@ export type CopilotIntrospectTarget = {
 };
 
 /** 模型连接配置（服务端返回掩码后的 key）。 */
+export type CopilotModelMode = "manual" | "platform" | "none";
+
 export type CopilotModelSettings = {
   source: "file" | "env" | "none";
+  mode: CopilotModelMode;
+  platformModel: string;
+  platformModelName: string;
   baseUrl: string;
   model: string;
   apiKeyMasked: string;
 };
 
 export type CopilotModelSettingsInput = {
-  baseUrl: string;
-  model: string;
+  mode?: CopilotModelMode;
+  platformModel?: string;
+  platformModelName?: string;
+  baseUrl?: string;
+  model?: string;
   apiKey?: string;
+};
+
+export type CopilotPlatformModel = {
+  id: string;
+  name: string;
+  series?: string;
+  maxModelLen?: number;
+  isDefault?: boolean;
 };
 
 function parseEvent(raw: string): CopilotStreamEvent | null {
@@ -252,7 +279,7 @@ export async function streamCopilotChat({
 }: StreamCopilotChatOptions): Promise<void> {
   const response = await fetch(CHAT_PATH, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: withAuthHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ sessionId, messages, draft: draft ?? null }),
     signal,
   });
@@ -309,7 +336,11 @@ export async function analyzeCopilot({
     form.append("dataFiles", file, file.name);
   }
 
-  const response = await fetch(ANALYZE_PATH, { method: "POST", body: form });
+  const response = await fetch(ANALYZE_PATH, {
+    method: "POST",
+    headers: withAuthHeaders(),
+    body: form,
+  });
   const payload = (await response.json()) as {
     ok?: boolean;
     mode?: "llm" | "heuristic";
@@ -451,6 +482,9 @@ export async function downloadCopilotBindingKit(ir: CopilotIr): Promise<void> {
 type SettingsPayload = {
   ok?: boolean;
   source?: "file" | "env" | "none";
+  mode?: CopilotModelMode;
+  platformModel?: string;
+  platformModelName?: string;
   baseUrl?: string;
   model?: string;
   apiKeyMasked?: string;
@@ -462,15 +496,36 @@ type SettingsPayload = {
 function toModelSettings(payload: SettingsPayload): CopilotModelSettings {
   return {
     source: payload.source ?? "none",
+    mode: payload.mode ?? "none",
+    platformModel: payload.platformModel ?? "",
+    platformModelName: payload.platformModelName ?? "",
     baseUrl: payload.baseUrl ?? "",
     model: payload.model ?? "",
     apiKeyMasked: payload.apiKeyMasked ?? "",
   };
 }
 
+const PLATFORM_MODELS_PATH = "/api/copilot/platform-models";
+
+/** 读取平台「模型配置」里已配置的模型清单。 */
+export async function listCopilotPlatformModels(): Promise<
+  { ok: true; models: CopilotPlatformModel[] } | { ok: false; error: string }
+> {
+  const response = await fetch(PLATFORM_MODELS_PATH, { headers: withAuthHeaders() });
+  const payload = (await response.json().catch(() => ({}))) as {
+    ok?: boolean;
+    models?: CopilotPlatformModel[];
+    error?: string;
+  };
+  if (!response.ok || !payload.ok) {
+    return { ok: false, error: payload.error ?? `HTTP ${response.status}` };
+  }
+  return { ok: true, models: payload.models ?? [] };
+}
+
 /** 读取当前模型连接配置（key 为掩码）??*/
 export async function getCopilotModelSettings(): Promise<CopilotModelSettings> {
-  const response = await fetch(SETTINGS_PATH);
+  const response = await fetch(SETTINGS_PATH, { headers: withAuthHeaders() });
   const payload = (await response.json()) as SettingsPayload;
   return toModelSettings(payload);
 }
@@ -481,7 +536,7 @@ export async function saveCopilotModelSettings(
 ): Promise<{ ok: true; settings: CopilotModelSettings } | { ok: false; errors: string[] }> {
   const response = await fetch(SETTINGS_PATH, {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: withAuthHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(input),
   });
   const payload = (await response.json()) as SettingsPayload;
@@ -493,7 +548,7 @@ export async function saveCopilotModelSettings(
 
 /** 清除本机保存的配置，回退到环境变量。 */
 export async function clearCopilotModelSettings(): Promise<CopilotModelSettings> {
-  const response = await fetch(SETTINGS_PATH, { method: "DELETE" });
+  const response = await fetch(SETTINGS_PATH, { method: "DELETE", headers: withAuthHeaders() });
   const payload = (await response.json()) as SettingsPayload;
   return toModelSettings(payload);
 }
@@ -504,7 +559,7 @@ export async function testCopilotModelSettings(
 ): Promise<{ ok: true; latencyMs: number } | { ok: false; error: string }> {
   const response = await fetch(SETTINGS_TEST_PATH, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: withAuthHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(input),
   });
   const payload = (await response.json()) as SettingsPayload;

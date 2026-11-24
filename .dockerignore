@@ -17,3 +17,5 @@ tests/**/node_modules
 .DS_Store
 .vscode
 .idea
+.env.local*
+.env.*.local

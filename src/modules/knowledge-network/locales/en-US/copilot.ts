@@ -102,6 +102,18 @@ export const copilotPart = {
   copilotSettingsSourceFile: "local settings",
   copilotSettingsSourceEnv: "environment variables",
   copilotSettingsSourceNone: "not configured",
+  copilotSettingsMode: "Model source",
+  copilotSettingsModePlatform: "Use a model configured in the platform",
+  copilotSettingsModeManual: "Enter endpoint manually",
+  copilotSettingsPlatformModel: "Platform model",
+  copilotSettingsPlatformModelHint: "Select a model configured in the platform",
+  copilotSettingsPlatformHint:
+    "Models are managed under Model management → Model configuration. The platform invokes them, so no key is required here.",
+  copilotSettingsPlatformEmpty:
+    "No model configured yet. Add one under Model management → Model configuration.",
+  copilotSettingsPlatformLoadFailed: "Failed to load platform models: {{error}}",
+  copilotSettingsPlatformRequired: "Select a model configured in the platform.",
+  copilotSettingsSourcePlatform: "Platform model: {{name}}",
   copilotSettingsRequired: "Base URL, model and API key are required.",
   copilotSettingsFailed: "Save failed, check the service log.",
   copilotSettingsTestFailed: "Connection failed: {{error}}",
