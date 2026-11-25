@@ -13,7 +13,7 @@ import {
 } from "@/shared/catalog";
 import { dataIngestionService } from "@/modules/data-ingestion/services/data-ingestion.service";
 
-const SUPPORTED_DATABASE_CONNECTORS = ["mariadb", "mysql"] as const;
+const SUPPORTED_DATABASE_CONNECTORS = ["mariadb", "mysql", "postgres", "postgresql"] as const;
 
 export interface DatabaseConnectionOption {
   connectorType: string;
@@ -48,6 +48,11 @@ function firstDatabase(value: unknown): string {
   return stringValue(value);
 }
 
+function connectorTypeFromLabel(label: string): string {
+  const normalized = label.trim().toLowerCase();
+  return normalized.startsWith("postgres") ? "postgresql" : "mysql";
+}
+
 function parseDatabaseLabel(label: string): Partial<DatabaseConnectionDefaults> | undefined {
   try {
     const parsed = new URL(label);
@@ -58,7 +63,7 @@ function parseDatabaseLabel(label: string): Partial<DatabaseConnectionDefaults> 
     return {
       databaseName,
       host: parsed.hostname.replace(/^\[|\]$/g, ""),
-      port: numberValue(parsed.port, 3306),
+      port: numberValue(parsed.port, connectorTypeFromLabel(label) === "postgresql" ? 5432 : 3306),
     };
   } catch {
     return undefined;
@@ -114,7 +119,7 @@ export async function listDatabaseConnectionOptions(): Promise<DatabaseConnectio
     const defaults = parseDatabaseLabel(status.database_label);
     if (status.configured && defaults) {
       options.set("data-ingestion:control", {
-        connectorType: status.database_label.startsWith("mariadb") ? "mariadb" : "mysql",
+        connectorType: connectorTypeFromLabel(status.database_label),
         defaults,
         healthStatus: "unchecked",
         id: "data-ingestion:control",
@@ -132,7 +137,7 @@ export async function listDatabaseConnectionOptions(): Promise<DatabaseConnectio
         continue;
       }
       options.set(`data-ingestion:space:${space.id}`, {
-        connectorType: space.database_label.startsWith("mariadb") ? "mariadb" : "mysql",
+        connectorType: connectorTypeFromLabel(space.database_label),
         defaults,
         healthStatus: space.status === "ready" ? "healthy" : "unhealthy",
         id: `data-ingestion:space:${space.id}`,
@@ -165,7 +170,11 @@ export async function getDatabaseConnectionDefaults(
   if (!connection || connection.type !== "physical") {
     throw new Error("Database connection was not found");
   }
-  if (!SUPPORTED_DATABASE_CONNECTORS.includes(connection.connectorType as "mariadb" | "mysql")) {
+  if (
+    !SUPPORTED_DATABASE_CONNECTORS.includes(
+      connection.connectorType as (typeof SUPPORTED_DATABASE_CONNECTORS)[number],
+    )
+  ) {
     throw new Error("Database connection type is not supported");
   }
 
@@ -179,7 +188,10 @@ export async function getDatabaseConnectionDefaults(
   return {
     databaseName: firstDatabase(config.database) || firstDatabase(config.databases),
     host,
-    port: numberValue(config.port, 3306),
+    port: numberValue(
+      config.port,
+      ["postgres", "postgresql"].includes(connection.connectorType) ? 5432 : 3306,
+    ),
     username,
   };
 }

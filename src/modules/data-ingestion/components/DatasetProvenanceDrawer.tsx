@@ -58,9 +58,9 @@ function formatTime(value?: string | null) {
 
 function formatJson(value: unknown) {
   try {
-    return JSON.stringify(value ?? {}, null, 2);
+    return JSON.stringify(value ?? {}, null, 2) ?? "[unserializable]";
   } catch {
-    return String(value);
+    return "[unserializable]";
   }
 }
 
@@ -68,10 +68,15 @@ function formatScalar(value: unknown) {
   if (value === null || value === undefined || value === "") {
     return "-";
   }
-  if (typeof value === "object") {
-    return formatJson(value);
+  if (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean" ||
+    typeof value === "bigint"
+  ) {
+    return String(value);
   }
-  return String(value);
+  return formatJson(value);
 }
 
 export function DatasetProvenanceDrawer({

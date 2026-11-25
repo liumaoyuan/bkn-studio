@@ -51,6 +51,23 @@ import type {
 const PREFIX = "/data-ingestion";
 let activeDataSpaceId = "";
 
+function readableMessage(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (value && typeof value === "object") {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return "";
+    }
+  }
+  return "";
+}
+
 export function setDataIngestionSpace(spaceId: string) {
   activeDataSpaceId = spaceId.trim();
 }
@@ -113,7 +130,7 @@ async function openAgentStream(path: string, init: RequestInit, retry = true): P
     let detail = body;
     try {
       const parsed = JSON.parse(body) as { detail?: unknown; message?: unknown };
-      detail = String(parsed.detail ?? parsed.message ?? body);
+      detail = readableMessage(parsed.detail ?? parsed.message) || body;
     } catch {
       // Keep the original response body.
     }
@@ -183,7 +200,7 @@ async function consumeAgentStream(
       session = eventSession as DataIngestionAgentSessionDetail;
     }
     if (event.type === "error") {
-      error = String(event.message || "Agent 执行失败");
+      error = readableMessage(event.message) || "Agent 执行失败";
     }
   }
   return { error, session };
@@ -667,7 +684,7 @@ export const dataIngestionService = {
         interval_seconds: 86_400,
         name: payload.name,
         path: payload.path || "",
-        recursive: false,
+        recursive: true,
         scan_type: payload.scanType,
         source_id: payload.sourceId,
         template_code: payload.templateCode,
@@ -675,7 +692,7 @@ export const dataIngestionService = {
       .then((response) => response.data);
     try {
       const completedJob = await scopedHttp
-        .post<DataIngestionAutoScanJob>(`${PREFIX}/auto-scan/jobs/${job.id}/run`)
+        .post<DataIngestionAutoScanJob>(`${PREFIX}/auto-scan/jobs/${job.id}/run?drain=true`)
         .then((response) => response.data);
       const run = completedJob.last_run_id
         ? await scopedHttp

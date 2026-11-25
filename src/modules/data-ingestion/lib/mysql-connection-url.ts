@@ -13,7 +13,10 @@ export interface MysqlConnectionInput {
   username: string;
 }
 
+export type ControlDatabaseEngine = "mysql" | "postgresql";
+
 export const DEFAULT_MYSQL_PORT = 3306;
+export const DEFAULT_POSTGRESQL_PORT = 5432;
 export const DEFAULT_CONTROL_DATABASE_NAME = "openbkn_data_ingestion";
 
 function splitMysqlEndpoint(hostValue: string, portValue: number | string) {
@@ -85,6 +88,37 @@ export function buildMysqlConnectionUrl(input: MysqlConnectionInput): string {
     `mysql+pymysql://${encodeURIComponent(username)}:${encodeURIComponent(input.password)}@`,
     `${host}:${endpoint.port}/${encodeURIComponent(databaseName)}?charset=utf8mb4`,
   ].join("");
+}
+
+export function buildPostgresqlConnectionUrl(input: MysqlConnectionInput): string {
+  const endpoint = splitMysqlEndpoint(input.host, input.port || DEFAULT_POSTGRESQL_PORT);
+  const host = formatMysqlHost(endpoint.host);
+  const databaseName = input.databaseName.trim();
+  const username = input.username.trim();
+
+  if (!host) {
+    throw new Error("Database host is required");
+  }
+  if (!databaseName) {
+    throw new Error("Database name is required");
+  }
+  if (!username) {
+    throw new Error("Database username is required");
+  }
+
+  return [
+    `postgresql+psycopg://${encodeURIComponent(username)}:${encodeURIComponent(input.password)}@`,
+    `${host}:${parseMysqlPort(endpoint.port || DEFAULT_POSTGRESQL_PORT)}/${encodeURIComponent(databaseName)}`,
+  ].join("");
+}
+
+export function buildControlDatabaseConnectionUrl(
+  input: MysqlConnectionInput,
+  engine: ControlDatabaseEngine,
+): string {
+  return engine === "postgresql"
+    ? buildPostgresqlConnectionUrl(input)
+    : buildMysqlConnectionUrl(input);
 }
 
 export function createDataSpaceSlug(

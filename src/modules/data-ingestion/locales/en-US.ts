@@ -25,7 +25,7 @@ export const dataIngestionEnUS = {
         "Connection details are encrypted. Use an account dedicated to this system rather than a database administrator account.",
       connectionGuide: "Enter the database details one field at a time",
       connectionHelp:
-        "If you know the server address, username, and password, enter those values. Keep the default port 3306 and use the suggested database name. When the account can create databases, the system creates a dedicated one automatically.",
+        "If you know the server address, username, and password, enter those values. MySQL uses port 3306 by default, and PostgreSQL uses 5432. The system creates a dedicated database automatically when the account has permission.",
       configReadError: "The existing control database configuration cannot be read",
       noPermission:
         "Your account cannot initialize the control database. Contact a platform administrator.",
@@ -36,8 +36,16 @@ export const dataIngestionEnUS = {
       hostRequired: "Enter the database server address",
       hostInvalid: "Enter only the server address without a protocol, path, or username",
       port: "Port",
-      portHint: "Usually 3306",
+      portHint: "Use the port required by the selected database engine",
+      mysqlPortHint: "MySQL/MariaDB normally uses 3306",
+      postgresqlPortHint: "PostgreSQL normally uses 5432",
       portInvalid: "Enter a port from 1 to 65535",
+      databaseType: "Database engine",
+      databaseTypeHint: "Select the engine that hosts the control database",
+      databaseTypes: {
+        mysql: "MySQL / MariaDB",
+        postgresql: "PostgreSQL",
+      },
       databaseNameLabel: "Database name",
       databaseNamePlaceholder: "openbkn_data_ingestion",
       databaseNameHint: "The suggested name is recommended; use letters, numbers, and underscores.",
@@ -45,7 +53,7 @@ export const dataIngestionEnUS = {
       databaseNameInvalid: "Use only letters, numbers, and underscores",
       username: "Username",
       usernamePlaceholder: "For example data_app",
-      usernameHint: "The account used to sign in to MySQL or MariaDB",
+      usernameHint: "The account used to sign in to MySQL, MariaDB, or PostgreSQL",
       usernameRequired: "Enter the database username",
       password: "Password",
       passwordPlaceholder: "Enter the database account password",
@@ -59,15 +67,17 @@ export const dataIngestionEnUS = {
         "The ingestion service uses this account. The target database may already exist or can be created with the optional bootstrap connection below.",
       bootstrapUrl: "Database creation connection URL (optional)",
       bootstrapUrlPlaceholder: "mysql+pymysql://dba:***@db.internal:3306/mysql",
+      postgresqlBootstrapUrlPlaceholder: "postgresql+psycopg://dba:***@db.internal:5432/postgres",
       bootstrapUrlHint:
         "Only needed when the target database must be created. This account is used once and is never stored.",
       createDatabase: "Create the database if it does not exist",
       createDatabaseHint:
         "Recommended. The current account needs permission to create databases. Turn this off when the database already exists or an administrator created it.",
       required: "Enter a database connection URL",
-      invalidUrl: "Use a mysql+pymysql:// or mariadb+pymysql:// connection URL",
+      invalidUrl:
+        "Use a mysql+pymysql://, mariadb+pymysql://, or postgresql+psycopg:// connection URL",
       invalidBootstrapUrl:
-        "Enter a mysql+pymysql:// or mariadb+pymysql:// URL for the creation account",
+        "Enter a mysql+pymysql://, mariadb+pymysql://, or postgresql+psycopg:// URL for the creation account",
       test: "Check connection",
       testPassed: "Connection works. You can continue.",
       testFailed: "Database connection failed: {{message}}",
@@ -102,7 +112,7 @@ export const dataIngestionEnUS = {
       pickerLabel: "Use an existing data connection (optional)",
       pickerHint:
         "Selecting a connection fills in the server, port, and known database. The account and password may still need to be entered.",
-      pickerPlaceholder: "Select a MariaDB or MySQL connection",
+      pickerPlaceholder: "Select a MySQL, MariaDB, or PostgreSQL connection",
       empty: "No compatible data connections are available. Continue with manual entry.",
       loadFailed: "Data connections are temporarily unavailable. Continue with manual entry.",
       detailFailed:
@@ -224,7 +234,8 @@ export const dataIngestionEnUS = {
       qualityScore: "Quality score",
       fieldsTitle: "Standardized field output",
       backfillProvenance: "Backfill historical provenance",
-      provenanceBackfilled: "Backfilled provenance for {{count}} historical records",
+      provenanceBackfilled_one: "Backfilled provenance for 1 historical record",
+      provenanceBackfilled_other: "Backfilled provenance for {{count}} historical records",
       qualityTitle: "Data quality report",
       fullQualityTitle: "Full data quality check",
       startFullCheck: "Start full check",
@@ -302,7 +313,8 @@ export const dataIngestionEnUS = {
         "This historical record has no source locator yet. Backfill provenance before inspecting it.",
       recoverableHint:
         "The source object and sheet can be recovered from the ingestion run: {{object}} / {{sheet}}. Backfill adds the source locator.",
-      backfilled: "Backfilled provenance for {{count}} historical records",
+      backfilled_one: "Backfilled provenance for 1 historical record",
+      backfilled_other: "Backfilled provenance for {{count}} historical records",
       recordsTitle: "Record-level source list",
       empty: "This dataset has no records",
       space: "Data space",
@@ -351,7 +363,8 @@ export const dataIngestionEnUS = {
         failed: "Failed",
       },
       batchRuntime: "Multi-file Results",
-      batchSucceeded: "Multi-file ingestion completed: {{count}} files succeeded",
+      batchSucceeded_one: "Multi-file ingestion completed: 1 file succeeded",
+      batchSucceeded_other: "Multi-file ingestion completed: {{count}} files succeeded",
       batchPartial: "Multi-file ingestion finished: {{succeeded}} succeeded, {{failed}} failed",
       sourceModeTitle: "Read once from a configured data source",
       sourceModeDescription:
@@ -371,7 +384,8 @@ export const dataIngestionEnUS = {
       columns: "Columns",
       tables: "Tables",
       extractedTables: "Extracted tables",
-      tableCount: "{{count}} tables",
+      tableCount_one: "1 table",
+      tableCount_other: "{{count}} tables",
       tableTitle: "Table {{index}} {{page}}",
       tablePage: "· page {{page}}",
       tablePreviewHint:
@@ -479,6 +493,7 @@ export const dataIngestionEnUS = {
         "Manage upload, directory, FTP/SFTP, database, and HTTP API source configurations.",
       editTitle: "Edit Data Source",
       name: "Name",
+      nameRequired: "Enter a data source name",
       type: "Type",
       location: "Location",
       status: "Status",
@@ -525,9 +540,10 @@ export const dataIngestionEnUS = {
       configurationMode: "Configuration",
       tableMode: "Choose a table (recommended)",
       customQueryMode: "Advanced: custom SQL",
-      tableName: "Table or view",
-      tableNameHint: "Load database tables and columns, then choose what to synchronize.",
-      tableNamePlaceholder: "Choose a table",
+      tableName: "Tables or views (multiple allowed)",
+      tableNameHint:
+        "After loading the database, select multiple tables or views. Each table is checked independently and only changed tables are re-ingested.",
+      tableNamePlaceholder: "Choose one or more tables",
       tableNameRequired: "Choose the table to synchronize.",
       loadTables: "Load tables",
       databaseView: "view",
@@ -545,7 +561,10 @@ export const dataIngestionEnUS = {
       autoQueryReady: "The query was generated automatically. No SQL is required.",
       autoQueryIncremental:
         "The first run is complete; later runs read only rows newer or changed after {{field}}.",
-      autoQueryFull: "Every run checks all data and automatically deduplicates identical rows.",
+      autoQueryFull_one:
+        "1 table selected. Every scan checks complete data and replaces the snapshot only when it changed.",
+      autoQueryFull_other:
+        "{{count}} tables selected. Every scan checks complete data table by table and replaces only snapshots that changed.",
       loadTablesFirst: "Enter the database connection, then select Load tables.",
       connectionErrorTitles: {
         auth: "Database authentication failed (check the password first)",
@@ -559,7 +578,7 @@ export const dataIngestionEnUS = {
         network: "Check the host, port, network connectivity, and database service status.",
         generic: "Review the connection settings and retry.",
       },
-      query: "Incremental SELECT query",
+      query: "Complete SELECT query",
       watermark: "Watermark column",
       watermarkHint:
         "When a watermark column is set, the query must use :cursor, for example WHERE updated_at > :cursor.",
@@ -637,8 +656,9 @@ export const dataIngestionEnUS = {
     autoScan: {
       title: "Automatic Scans",
       description:
-        "Discover new data by interval, daily, weekly, or cron schedule and run the standard ingestion pipeline.",
+        "Monitor sources by interval, daily, weekly, or cron schedule. Changed file and full database snapshots replace the previous snapshot and remove records deleted at the source.",
       name: "Plan name",
+      nameRequired: "Enter an automatic task name",
       source: "Data source",
       dataset: "Target dataset",
       schedule: "Schedule",
@@ -674,7 +694,8 @@ export const dataIngestionEnUS = {
       recursive: "Recursive scan",
       databaseSettingsFromSource: "Database sync settings come from the data source",
       databaseIncrementalField: "Only new and changed data is synchronized, using {{field}}.",
-      databaseFullCheck: "Each run checks all data and automatically skips duplicate records.",
+      databaseFullCheck:
+        "Each run reads all data; when it changes, the source snapshot replaces the previous version and removes records deleted at the source.",
       databaseCustomSql: "This source uses advanced custom SQL. Verify the query conditions.",
       types: {
         interval: "Interval",

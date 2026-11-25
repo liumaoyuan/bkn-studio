@@ -129,7 +129,7 @@ describe("data-ingestion service", () => {
         interval_seconds: 86_400,
         name: "Manual ingestion",
         path: "/data/imports",
-        recursive: false,
+        recursive: true,
         scan_type: "local",
         source_id: "source-1",
         template_code: "tabular_standard",
@@ -138,7 +138,7 @@ describe("data-ingestion service", () => {
     );
     expect(http.post).toHaveBeenNthCalledWith(
       2,
-      "/data-ingestion/auto-scan/jobs/job-1/run",
+      "/data-ingestion/auto-scan/jobs/job-1/run?drain=true",
       undefined,
       { headers: { "x-data-ingestion-space": "default" } },
     );

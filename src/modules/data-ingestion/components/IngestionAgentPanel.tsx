@@ -43,6 +43,7 @@ import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "re
 import { useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
+import { writeTextToClipboard } from "@/framework/compat/clipboard";
 import { useAppServices } from "@/framework/context/use-app-services";
 import { extractRequestErrorMessage } from "@/framework/request/error-message";
 import { MarkdownText } from "@/framework/ui/common/MarkdownText";
@@ -62,6 +63,10 @@ import styles from "./IngestionAgentPanel.module.css";
 
 const { Paragraph, Text, Title } = Typography;
 
+type IngestionAgentPanelProps = {
+  onDataChanged?: () => void | Promise<void>;
+};
+
 function safeText(value: unknown) {
   if (value === null || value === undefined || value === "") {
     return "-";
@@ -70,6 +75,13 @@ function safeText(value: unknown) {
     return String(value);
   }
   return JSON.stringify(value);
+}
+
+function eventText(value: unknown) {
+  if (value === null || value === undefined || value === "") {
+    return "";
+  }
+  return safeText(value);
 }
 
 function McpToolList({
@@ -182,7 +194,7 @@ function McpToolList({
   );
 }
 
-export function IngestionAgentPanel() {
+export function IngestionAgentPanel({ onDataChanged }: IngestionAgentPanelProps = {}) {
   const { t } = useTranslation();
   const { message } = useAppServices();
   const navigate = useNavigate();
@@ -481,6 +493,13 @@ export function IngestionAgentPanel() {
       message.error(extractRequestErrorMessage(error));
     } finally {
       await reconcileSession(detail.id);
+      if (approve) {
+        try {
+          await onDataChanged?.();
+        } catch {
+          // The parent owns its refresh error presentation.
+        }
+      }
       setStreamActivity("");
       setStreamReasoning("");
       setResolvingApprovalId(undefined);
@@ -555,7 +574,7 @@ export function IngestionAgentPanel() {
 
   async function copyText(value: string) {
     try {
-      await navigator.clipboard.writeText(value);
+      await writeTextToClipboard(value);
       message.success(t("dataIngestion.agent.copied"));
     } catch {
       message.error(t("dataIngestion.agent.copy"));
@@ -673,7 +692,7 @@ export function IngestionAgentPanel() {
     if (event.type === "tool_start") {
       setStreamActivity(
         t("dataIngestion.agent.streamToolRunning", {
-          name: String(event.name || ""),
+          name: eventText(event.name),
         }),
       );
       return;
@@ -681,14 +700,14 @@ export function IngestionAgentPanel() {
     if (event.type === "tool_result") {
       setStreamActivity(
         t("dataIngestion.agent.streamToolFinished", {
-          name: String(event.name || ""),
+          name: eventText(event.name),
         }),
       );
       return;
     }
     if (event.type === "approval_resolved") {
       const approvalId = String(event.approval_id || "");
-      const status = String(event.status || "");
+      const status = eventText(event.status);
       setDetail((current) =>
         current
           ? {
@@ -706,7 +725,7 @@ export function IngestionAgentPanel() {
       return;
     }
     if (event.type === "status") {
-      const status = String(event.status || "");
+      const status = eventText(event.status);
       setDetail((current) => (current ? { ...current, status } : current));
       return;
     }

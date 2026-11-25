@@ -240,7 +240,7 @@ function emptyScanForm() {
     template_code: "auto",
     scan_type: "local",
     path: "",
-    recursive: false,
+    recursive: true,
     file_pattern: "*",
     interval_seconds: 300,
     schedule_type: "interval",
@@ -271,10 +271,10 @@ function emptySourceForm() {
     password: "",
     database: "",
     private_key: "",
-    query: "",
     query_mode: "table" as "table" | "custom",
     sync_mode: "full" as "full" | "incremental",
     table_name: "",
+    table_names: [] as string[],
     schema_name: "",
     initial_cursor: "",
     record_path: "",
@@ -1020,16 +1020,13 @@ export function DataIngestionWorkbenchScene({
 
   async function saveSource() {
     if (!sourceForm.name.trim()) {
+      message.error(t("dataIngestion.sources.nameRequired"));
       return;
     }
     const sourceIsDatabase = ["mysql", "postgres"].includes(sourceForm.source_type);
-    if (sourceIsDatabase && sourceForm.query_mode === "table") {
-      if (!sourceForm.table_name) {
+    if (sourceIsDatabase) {
+      if (!sourceForm.table_names.length) {
         message.error(t("dataIngestion.sources.tableNameRequired"));
-        return;
-      }
-      if (sourceForm.sync_mode === "incremental" && !sourceForm.watermark_column) {
-        message.error(t("dataIngestion.sources.changeFieldRequired"));
         return;
       }
     }
@@ -1069,37 +1066,18 @@ export function DataIngestionWorkbenchScene({
           password: sourceForm.password || undefined,
           database: sourceForm.database || undefined,
           private_key: sourceForm.private_key || undefined,
-          query_mode: sourceIsDatabase ? sourceForm.query_mode : undefined,
-          sync_mode:
-            sourceIsDatabase && sourceForm.query_mode === "table"
-              ? sourceForm.sync_mode
-              : undefined,
+          query_mode: sourceIsDatabase ? "table" : undefined,
+          sync_mode: sourceIsDatabase ? "full" : undefined,
           table_name:
-            sourceIsDatabase && sourceForm.query_mode === "table"
+            sourceIsDatabase && sourceForm.table_names.length === 1
               ? sourceForm.table_name || undefined
               : undefined,
-          schema_name:
-            sourceIsDatabase && sourceForm.query_mode === "table"
-              ? sourceForm.schema_name || undefined
-              : undefined,
-          initial_cursor:
-            sourceIsDatabase &&
-            sourceForm.query_mode === "table" &&
-            sourceForm.sync_mode === "incremental"
-              ? sourceForm.initial_cursor || "1970-01-01T00:00:00"
-              : undefined,
-          query:
-            !sourceIsDatabase || sourceForm.query_mode === "custom"
-              ? sourceForm.query || undefined
-              : undefined,
+          table_names: sourceIsDatabase ? sourceForm.table_names : undefined,
+          schema_name: sourceIsDatabase ? sourceForm.schema_name || undefined : undefined,
           record_path:
             sourceForm.source_type === "api" ? sourceForm.record_path || undefined : undefined,
           use_tls: sourceForm.source_type === "ftp" ? sourceForm.use_tls : undefined,
-          watermark_column:
-            sourceIsDatabase &&
-            (sourceForm.query_mode === "custom" || sourceForm.sync_mode === "incremental")
-              ? sourceForm.watermark_column || undefined
-              : undefined,
+          watermark_column: undefined,
         },
       };
       if (editingSourceId) {
@@ -1144,11 +1122,11 @@ export function DataIngestionWorkbenchScene({
       if (tableName) {
         setSourceForm((current) => ({
           ...current,
-          table_name: catalog.table_name,
+          table_name: catalog.table_name || current.table_names[0] || "",
           schema_name: catalog.schema_name,
-          sync_mode: catalog.recommended_sync_mode,
-          watermark_column: catalog.recommended_watermark,
-          initial_cursor: catalog.recommended_initial_cursor,
+          sync_mode: "full",
+          watermark_column: "",
+          initial_cursor: "",
         }));
       }
     } catch (error) {
@@ -1410,15 +1388,22 @@ export function DataIngestionWorkbenchScene({
       password: "",
       database: typeof config.database === "string" ? config.database : "",
       private_key: "",
-      query_mode: config.query_mode === "table" ? "table" : "custom",
-      sync_mode: config.sync_mode === "incremental" ? "incremental" : "full",
+      query_mode: "table",
+      sync_mode: "full",
       table_name: typeof config.table_name === "string" ? config.table_name : "",
+      table_names: Array.isArray(config.table_names)
+        ? config.table_names
+            .filter((value): value is string => typeof value === "string")
+            .map((value) => value.trim())
+            .filter(Boolean)
+        : typeof config.table_name === "string" && config.table_name
+          ? [config.table_name]
+          : [],
       schema_name: typeof config.schema_name === "string" ? config.schema_name : "",
-      initial_cursor: typeof config.initial_cursor === "string" ? config.initial_cursor : "",
-      query: typeof config.query === "string" ? config.query : "",
+      initial_cursor: "",
       record_path: typeof config.record_path === "string" ? config.record_path : "",
       use_tls: config.use_tls === true,
-      watermark_column: typeof config.watermark_column === "string" ? config.watermark_column : "",
+      watermark_column: "",
     });
     setSourceCatalog(null);
     setSourceCatalogError("");
@@ -1739,6 +1724,18 @@ export function DataIngestionWorkbenchScene({
   }
 
   async function saveScanJob() {
+    if (!scanForm.name.trim()) {
+      message.error(t("dataIngestion.autoScan.nameRequired"));
+      return;
+    }
+    if (!scanForm.source_id) {
+      message.error(t("dataIngestion.import.selectSource"));
+      return;
+    }
+    if (!scanForm.dataset_id) {
+      message.error(t("dataIngestion.errors.selectDataset"));
+      return;
+    }
     try {
       const wasEditing = Boolean(editingScanId);
       if (editingScanId) {
@@ -3458,14 +3455,6 @@ export function DataIngestionWorkbenchScene({
         ? `${table.name} · ${t("dataIngestion.sources.databaseView")}`
         : table.name,
   }));
-  const databaseColumnOptions = (sourceCatalog?.columns ?? []).map((column) => ({
-    value: column.name,
-    label:
-      column.name === sourceCatalog?.recommended_watermark
-        ? `${column.name} · ${t("dataIngestion.sources.recommended")}`
-        : `${column.name} (${column.type})`,
-  }));
-
   const viewContent = {
     overview: renderOverview,
     import: renderImport,
@@ -3475,7 +3464,7 @@ export function DataIngestionWorkbenchScene({
     "auto-scan": renderAutoScan,
     agent: () =>
       can("data_ingestion:agent_use") ? (
-        <IngestionAgentPanel />
+        <IngestionAgentPanel onDataChanged={() => loadCore(true)} />
       ) : (
         <Alert message={t("dataIngestion.errors.noPermission")} showIcon type="error" />
       ),
@@ -4485,175 +4474,60 @@ export function DataIngestionWorkbenchScene({
                   value={sourceForm.database}
                 />
               </Form.Item>
-              <Form.Item label={t("dataIngestion.sources.configurationMode")}>
-                <Select
-                  onChange={(query_mode: "table" | "custom") =>
-                    setSourceForm((current) => ({ ...current, query_mode }))
-                  }
-                  options={[
-                    {
-                      value: "table",
-                      label: t("dataIngestion.sources.tableMode"),
-                    },
-                    {
-                      value: "custom",
-                      label: t("dataIngestion.sources.customQueryMode"),
-                    },
-                  ]}
-                  value={sourceForm.query_mode}
-                />
+              <Form.Item
+                extra={t("dataIngestion.sources.tableNameHint")}
+                label={t("dataIngestion.sources.tableName")}
+              >
+                <Space.Compact block>
+                  <Select
+                    loading={sourceCatalogLoading}
+                    mode="multiple"
+                    onChange={(tableNames: string[]) =>
+                      setSourceForm((current) => ({
+                        ...current,
+                        table_name: tableNames[0] ?? "",
+                        table_names: tableNames,
+                      }))
+                    }
+                    options={
+                      databaseTableOptions.length || !sourceForm.table_name
+                        ? databaseTableOptions
+                        : sourceForm.table_names.map((tableName) => ({
+                            value: tableName,
+                            label: tableName,
+                          }))
+                    }
+                    placeholder={t("dataIngestion.sources.tableNamePlaceholder")}
+                    showSearch
+                    style={{ width: "100%" }}
+                    value={sourceForm.table_names}
+                  />
+                  <Button
+                    icon={<ReloadOutlined />}
+                    loading={sourceCatalogLoading}
+                    onClick={() => void loadDatabaseCatalog()}
+                  >
+                    {t("dataIngestion.sources.loadTables")}
+                  </Button>
+                </Space.Compact>
               </Form.Item>
-              {sourceForm.query_mode === "table" ? (
-                <>
-                  <Form.Item
-                    extra={t("dataIngestion.sources.tableNameHint")}
-                    label={t("dataIngestion.sources.tableName")}
-                  >
-                    <Space.Compact block>
-                      <Select
-                        loading={sourceCatalogLoading}
-                        onChange={(tableName) => void loadDatabaseCatalog(tableName)}
-                        options={
-                          databaseTableOptions.length || !sourceForm.table_name
-                            ? databaseTableOptions
-                            : [{ value: sourceForm.table_name, label: sourceForm.table_name }]
-                        }
-                        placeholder={t("dataIngestion.sources.tableNamePlaceholder")}
-                        showSearch
-                        style={{ width: "100%" }}
-                        value={sourceForm.table_name || undefined}
-                      />
-                      <Button
-                        icon={<ReloadOutlined />}
-                        loading={sourceCatalogLoading}
-                        onClick={() => void loadDatabaseCatalog()}
-                      >
-                        {t("dataIngestion.sources.loadTables")}
-                      </Button>
-                    </Space.Compact>
-                  </Form.Item>
-                  <Form.Item label={t("dataIngestion.sources.syncMode")}>
-                    <Select
-                      onChange={(sync_mode: "full" | "incremental") =>
-                        setSourceForm((current) => ({
-                          ...current,
-                          sync_mode,
-                          watermark_column:
-                            sync_mode === "incremental"
-                              ? current.watermark_column ||
-                                sourceCatalog?.recommended_watermark ||
-                                ""
-                              : "",
-                          initial_cursor:
-                            sync_mode === "incremental"
-                              ? current.initial_cursor ||
-                                sourceCatalog?.recommended_initial_cursor ||
-                                ""
-                              : "",
-                        }))
-                      }
-                      options={[
-                        {
-                          value: "full",
-                          label: t("dataIngestion.sources.syncModes.full"),
-                        },
-                        {
-                          value: "incremental",
-                          label: t("dataIngestion.sources.syncModes.incremental"),
-                        },
-                      ]}
-                      value={sourceForm.sync_mode}
-                    />
-                  </Form.Item>
-                  {sourceForm.sync_mode === "incremental" ? (
-                    <Form.Item
-                      extra={
-                        sourceCatalog?.recommendation_reason ||
-                        t("dataIngestion.sources.changeFieldHint")
-                      }
-                      label={t("dataIngestion.sources.changeField")}
-                    >
-                      <Select
-                        onChange={(watermark_column) => {
-                          const column = sourceCatalog?.columns.find(
-                            (item) => item.name === watermark_column,
-                          );
-                          const type = column?.type.toUpperCase() ?? "";
-                          const initial_cursor =
-                            watermark_column === sourceCatalog?.recommended_watermark
-                              ? sourceCatalog.recommended_initial_cursor
-                              : type.includes("INT") ||
-                                  type.includes("NUMBER") ||
-                                  type.includes("NUMERIC")
-                                ? "0"
-                                : type.includes("DATE") || type.includes("TIME")
-                                  ? "1970-01-01T00:00:00"
-                                  : "";
-                          setSourceForm((current) => ({
-                            ...current,
-                            watermark_column,
-                            initial_cursor,
-                          }));
-                        }}
-                        options={databaseColumnOptions}
-                        placeholder={t("dataIngestion.sources.changeFieldPlaceholder")}
-                        showSearch
-                        value={sourceForm.watermark_column || undefined}
-                      />
-                    </Form.Item>
-                  ) : null}
-                  {sourceCatalog?.table_name ? (
-                    <Alert
-                      description={
-                        sourceForm.sync_mode === "incremental"
-                          ? t("dataIngestion.sources.autoQueryIncremental", {
-                              field: sourceForm.watermark_column,
-                            })
-                          : t("dataIngestion.sources.autoQueryFull")
-                      }
-                      message={t("dataIngestion.sources.autoQueryReady")}
-                      showIcon
-                      style={{ marginBottom: 16 }}
-                      type="success"
-                    />
-                  ) : (
-                    <Alert
-                      message={t("dataIngestion.sources.loadTablesFirst")}
-                      showIcon
-                      style={{ marginBottom: 16 }}
-                      type="info"
-                    />
-                  )}
-                </>
+              {sourceCatalog ? (
+                <Alert
+                  description={t("dataIngestion.sources.autoQueryFull", {
+                    count: sourceForm.table_names.length,
+                  })}
+                  message={t("dataIngestion.sources.autoQueryReady")}
+                  showIcon
+                  style={{ marginBottom: 16 }}
+                  type="success"
+                />
               ) : (
-                <>
-                  <Form.Item
-                    extra={t("dataIngestion.sources.watermarkHint")}
-                    label={t("dataIngestion.sources.watermark")}
-                  >
-                    <Input
-                      onChange={(event) =>
-                        setSourceForm((current) => ({
-                          ...current,
-                          watermark_column: event.target.value,
-                        }))
-                      }
-                      value={sourceForm.watermark_column}
-                    />
-                  </Form.Item>
-                  <Form.Item label={t("dataIngestion.sources.query")}>
-                    <Input.TextArea
-                      onChange={(event) =>
-                        setSourceForm((current) => ({
-                          ...current,
-                          query: event.target.value,
-                        }))
-                      }
-                      rows={4}
-                      value={sourceForm.query}
-                    />
-                  </Form.Item>
-                </>
+                <Alert
+                  message={t("dataIngestion.sources.loadTablesFirst")}
+                  showIcon
+                  style={{ marginBottom: 16 }}
+                  type="info"
+                />
               )}
             </>
           ) : null}
@@ -4796,6 +4670,7 @@ export function DataIngestionWorkbenchScene({
                             ? source.config.path
                             : ""
                           : current.path,
+                      recursive: ["local_dir", "ftp", "sftp"].includes(source?.source_type ?? ""),
                     }));
                   }}
                   options={sources.map((item) => ({
@@ -4824,11 +4699,7 @@ export function DataIngestionWorkbenchScene({
               message={t("dataIngestion.autoScan.databaseSettingsFromSource")}
               description={
                 selectedScanSource.config.query_mode === "table"
-                  ? selectedScanSource.config.sync_mode === "incremental"
-                    ? t("dataIngestion.autoScan.databaseIncrementalField", {
-                        field: displayValue(selectedScanSource.config.watermark_column || "-"),
-                      })
-                    : t("dataIngestion.autoScan.databaseFullCheck")
+                  ? t("dataIngestion.autoScan.databaseFullCheck")
                   : t("dataIngestion.autoScan.databaseCustomSql")
               }
               showIcon
