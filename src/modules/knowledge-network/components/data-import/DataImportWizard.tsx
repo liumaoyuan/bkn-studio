@@ -85,7 +85,7 @@ export function DataImportWizard({ networkId, onClose, onImported, open }: DataI
   const [error, setError] = useState("");
   const [preview, setPreview] = useState<DataImportPreview | null>(null);
   const [excluded, setExcluded] = useState<Record<string, boolean>>({});
-  const [preferredHint, setPreferredHint] = useState(false);
+  const [routedTypeCount, setRoutedTypeCount] = useState(0);
   const [propertyNames, setPropertyNames] = useState<Record<string, Record<string, string>>>({});
   const [report, setReport] = useState<DataImportReport | null>(null);
   const [writeMode, setWriteMode] = useState<DataImportWriteMode>("replace");
@@ -109,7 +109,7 @@ export function DataImportWizard({ networkId, onClose, onImported, open }: DataI
     setReport(null);
     setError("");
     setExcluded({});
-    setPreferredHint(false);
+    setRoutedTypeCount(0);
     setPropertyNames({});
     setWriteMode("replace");
     setWatermarkField("");
@@ -206,14 +206,16 @@ export function DataImportWizard({ networkId, onClose, onImported, open }: DataI
       (max, objectMapping) => Math.max(max, objectMapping.fields.length),
       0,
     );
-    let hiddenMatches = 0;
+    // 多对象类映射时，按行分派由后端行内打分决定：勾选所有能匹配字段的对象类不会串写。
+    const matchedTypes = source.mapping.objects.filter(
+      (objectMapping) => objectMapping.fields.length > 0,
+    );
+    const useRowRouting = source.mapping.objects.length > 1;
     for (const objectMapping of source.mapping.objects) {
-      const preferred =
-        objectMapping.fields.length > 0 && objectMapping.fields.length === maxFields;
+      const preferred = useRowRouting
+        ? objectMapping.fields.length > 0
+        : objectMapping.fields.length > 0 && objectMapping.fields.length === maxFields;
       nextExcluded[objectMapping.objectTypeId] = !preferred;
-      if (!preferred && objectMapping.fields.length > 0) {
-        hiddenMatches += 1;
-      }
       const fieldNames: Record<string, string> = {};
       for (const field of objectMapping.fields) {
         fieldNames[field.sourceColumn] = field.propertyName;
@@ -222,7 +224,7 @@ export function DataImportWizard({ networkId, onClose, onImported, open }: DataI
     }
     setExcluded(nextExcluded);
     setPropertyNames(nextPropertyNames);
-    setPreferredHint(hiddenMatches > 0);
+    setRoutedTypeCount(useRowRouting && matchedTypes.length > 1 ? matchedTypes.length : 0);
     setStep(1);
   };
 
@@ -800,10 +802,10 @@ export function DataImportWizard({ networkId, onClose, onImported, open }: DataI
               type="warning"
             />
           ) : null}
-          {preferredHint ? (
+          {routedTypeCount > 1 ? (
             <Alert
               className={styles.alert}
-              message={t("knowledgeNetwork.dataImportPreferredHint")}
+              message={t("knowledgeNetwork.dataImportRoutedHint", { count: routedTypeCount })}
               showIcon
               type="info"
             />
@@ -968,6 +970,23 @@ export function DataImportWizard({ networkId, onClose, onImported, open }: DataI
             size="small"
             style={{ marginTop: 16 }}
           />
+
+          {report.routing && report.routing.total > 0 ? (
+            <Alert
+              className={styles.alert}
+              message={t("knowledgeNetwork.dataImportRoutingSummary", {
+                assigned: report.routing.assigned,
+                deduped: report.routing.deduped ?? 0,
+                skipped: report.routing.skipped,
+                total: report.routing.total,
+                types: Object.values(report.routing.byObjectType ?? {}).filter((count) => count > 0)
+                  .length,
+              })}
+              showIcon
+              style={{ marginTop: 12 }}
+              type="info"
+            />
+          ) : null}
 
           {report.relations && report.relations.length > 0 ? (
             <Table

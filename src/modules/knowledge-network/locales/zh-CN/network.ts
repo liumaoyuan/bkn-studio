@@ -341,5 +341,8 @@ export const networkPart = {
   dataProvenanceBatchTime: "时间",
   dataProvenanceEmpty: "暂无导入记录，先从「导入数据」开始。",
   dataProvenanceLoadFailed: "数据溯源加载失败，请稍后重试。",
+  dataImportRoutedHint: "检测到数据行分派到 {{count}} 个对象类，已自动勾选；如需调整可取消勾选。",
+  dataImportRoutingSummary:
+    "共读取 {{total}} 行，分派到 {{types}} 个对象类并写入 {{assigned}} 条，跳过 {{skipped}} 行，去重 {{deduped}} 条。",
   dataImportDone: "完成",
 };

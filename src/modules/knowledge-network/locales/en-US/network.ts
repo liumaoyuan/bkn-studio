@@ -358,5 +358,9 @@ export const networkPart = {
   dataProvenanceBatchTime: "Time",
   dataProvenanceEmpty: "No import records yet. Start from Import data.",
   dataProvenanceLoadFailed: "Failed to load data provenance, please retry later.",
+  dataImportRoutedHint:
+    "Rows were routed to {{count}} object types and are selected automatically; uncheck to adjust.",
+  dataImportRoutingSummary:
+    "{{total}} rows read, {{assigned}} written across {{types}} object types, {{skipped}} skipped, {{deduped}} deduped.",
   dataImportDone: "Done",
 };

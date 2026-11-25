@@ -91,6 +91,8 @@ export type DataImportStats = {
   documents: number;
   skipped: number;
   issueCount: number;
+  byObjectType?: Record<string, number>;
+  skippedReasons?: Record<string, number>;
 };
 
 export type DataImportIssue = { row: number; field?: string; message: string };
@@ -158,6 +160,14 @@ export type DataImportReport = {
   writeMode?: DataImportWriteMode;
   watermark?: { field: string; value?: string };
   sourceLabel?: string;
+  routing?: {
+    total: number;
+    assigned: number;
+    skipped: number;
+    byObjectType: Record<string, number>;
+    skippedReasons?: Record<string, number>;
+    deduped?: number;
+  };
   error?: string;
 };
 
