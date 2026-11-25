@@ -747,3 +747,9 @@
   color: var(--color-text-quaternary, #bfbfbf);
   font-variant-numeric: tabular-nums;
 }
+
+.analyzeStepsTitle {
+  margin: 6px 0 2px;
+  font-size: 12px;
+  color: var(--color-text-tertiary, #8c8c8c);
+}

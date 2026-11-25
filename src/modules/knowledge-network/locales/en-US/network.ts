@@ -339,6 +339,7 @@ export const networkPart = {
   dataImportReportOk: "Import finished in {{seconds}}s.",
   dataImportReportFail: "Import did not fully succeed; see details below.",
   dataImportBackToMapping: "Back to mapping",
+  copilotStepsLast: "Last build steps",
   dataProvenanceTitle: "Data provenance",
   dataProvenanceSubtitle:
     "Review the data source, field mappings and import batches of each object type in this knowledge network.",

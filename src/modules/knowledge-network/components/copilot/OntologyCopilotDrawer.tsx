@@ -128,6 +128,8 @@ const MAX_DRAFT_HISTORY = 20;
 
 /** 草案自动保存的 localStorage 键（同浏览器下次打开可恢复）。 */
 const COPILOT_DRAFT_STORAGE_KEY = "bkn-studio:copilot-draft:v1";
+/** 最近一次构建过程的步骤（恢复草案时一并展示）。 */
+const COPILOT_STEPS_STORAGE_KEY = "bkn-studio:copilot-steps:v1";
 
 type StoredCopilotDraft = {
   draft: CopilotIr;
@@ -348,6 +350,13 @@ export function OntologyCopilotDrawer({ open, onClose, onImported }: OntologyCop
       setSchemaStats(saved.schema ?? null);
       setOpenQuestions(Array.isArray(saved.openQuestions) ? saved.openQuestions : []);
       setBaseNetwork(saved.baseNetwork ?? null);
+      const rawSteps = window.localStorage.getItem(COPILOT_STEPS_STORAGE_KEY);
+      if (rawSteps) {
+        const savedSteps = JSON.parse(rawSteps) as CopilotAnalyzeStep[];
+        if (Array.isArray(savedSteps)) {
+          setAnalyzeSteps(savedSteps.slice(-12));
+        }
+      }
     } catch {
       // 损坏的本地缓存直接忽略，不阻塞使用。
     }
@@ -845,8 +854,13 @@ export function OntologyCopilotDrawer({ open, onClose, onImported }: OntologyCop
     setAnalyzeSteps([]);
     const mergeStep = (step: CopilotAnalyzeStep) => {
       setAnalyzeSteps((prev) => {
-        const next = prev.filter((item) => item.id !== step.id);
-        return [...next, step];
+        const next = [...prev.filter((item) => item.id !== step.id), step];
+        try {
+          window.localStorage.setItem(COPILOT_STEPS_STORAGE_KEY, JSON.stringify(next));
+        } catch {
+          // 忽略存储失败
+        }
+        return next;
       });
     };
     try {
@@ -894,6 +908,12 @@ export function OntologyCopilotDrawer({ open, onClose, onImported }: OntologyCop
     setBaseNetworkId(null);
     setAnalyzeWarnings([]);
     setFallbackNotice(null);
+    setAnalyzeSteps([]);
+    try {
+      window.localStorage.removeItem(COPILOT_STEPS_STORAGE_KEY);
+    } catch {
+      // 忽略
+    }
   }, [resetDraft]);
 
   const handleDownload = useCallback(async () => {
@@ -2130,6 +2150,9 @@ export function OntologyCopilotDrawer({ open, onClose, onImported }: OntologyCop
           />
           {error ? <span className={styles.error}>{error}</span> : null}
           {draftError ? <span className={styles.error}>{draftError}</span> : null}
+          {analyzeSteps.length > 0 && !analyzing ? (
+            <div className={styles.analyzeStepsTitle}>{t("knowledgeNetwork.copilotStepsLast")}</div>
+          ) : null}
           {analyzeSteps.length > 0 ? (
             <ol className={styles.analyzeSteps}>
               {analyzeSteps.map((step) => (

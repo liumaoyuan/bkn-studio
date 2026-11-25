@@ -323,6 +323,7 @@ export const networkPart = {
   dataImportReportOk: "导入完成，用时 {{seconds}} 秒。",
   dataImportReportFail: "导入未完全成功，请查看下方明细。",
   dataImportBackToMapping: "返回映射",
+  copilotStepsLast: "上次构建过程",
   dataProvenanceTitle: "数据溯源",
   dataProvenanceSubtitle: "查看当前知识网络每个对象类的数据来源、字段映射与导入批次。",
   dataProvenanceObjects: "对象类与数据来源",
