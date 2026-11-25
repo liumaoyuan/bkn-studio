@@ -704,3 +704,52 @@
   line-height: 1.5;
   color: var(--color-success-text);
 }
+
+.analyzeSteps {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 4px 0 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(22, 119, 255, 0.05);
+  list-style: none;
+}
+
+.analyzeStep {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--color-text-secondary, #666);
+}
+
+.analyzeStepIcon {
+  width: 16px;
+  text-align: center;
+  color: var(--color-text-quaternary, #999);
+}
+
+.analyzeStep[data-status="done"] .analyzeStepIcon {
+  color: var(--color-success, #52c41a);
+}
+
+.analyzeStepLabel {
+  color: var(--color-text, #1f2329);
+}
+
+.analyzeStepDetail {
+  color: var(--color-text-tertiary, #8c8c8c);
+}
+
+.analyzeStepMs {
+  margin-left: auto;
+  color: var(--color-text-quaternary, #bfbfbf);
+  font-variant-numeric: tabular-nums;
+}
+
+.analyzeStepsTitle {
+  margin: 6px 0 2px;
+  font-size: 12px;
+  color: var(--color-text-tertiary, #8c8c8c);
+}
