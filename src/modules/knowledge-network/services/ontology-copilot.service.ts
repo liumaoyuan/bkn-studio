@@ -373,6 +373,50 @@ export async function analyzeCopilot({
   };
 }
 
+export type CopilotIrIssue = {
+  level: "error" | "warning";
+  code: string;
+  message: string;
+  path?: string;
+  fixed?: boolean;
+};
+
+export type CopilotIrCheckResult =
+  | {
+      ok: true;
+      ir: CopilotIr;
+      changed: boolean;
+      issues: CopilotIrIssue[];
+      summary: { errors: number; warnings: number; fixed: number };
+    }
+  | { ok: false; errors: string[] };
+
+/** 对当前草案做确定性自检与修复（P0-B）。 */
+export async function checkCopilotIr(ir: CopilotIr): Promise<CopilotIrCheckResult> {
+  const response = await fetch("/api/copilot/ir/check", {
+    method: "POST",
+    headers: { ...withAuthHeaders(), "content-type": "application/json" },
+    body: JSON.stringify({ ir }),
+  });
+  const payload = (await response.json()) as {
+    ok?: boolean;
+    ir?: CopilotIr;
+    changed?: boolean;
+    issues?: CopilotIrIssue[];
+    summary?: { errors: number; warnings: number; fixed: number };
+    errors?: string[];
+  };
+  if (!response.ok || !payload.ok || !payload.ir) {
+    return { ok: false, errors: payload.errors ?? [`HTTP ${response.status}`] };
+  }
+  return {
+    ok: true,
+    ir: payload.ir,
+    changed: Boolean(payload.changed),
+    issues: payload.issues ?? [],
+    summary: payload.summary ?? { errors: 0, warnings: 0, fixed: 0 },
+  };
+}
 /** 下载编译好的 .bkn 资源包。 */
 export async function downloadCopilotPackage(ir: CopilotIr): Promise<void> {
   const response = await fetch(DOWNLOAD_PATH, {
@@ -1123,4 +1167,86 @@ export function createCopilotSessionId(): string {
     return cryptoApi.randomUUID();
   }
   return `copilot-${Date.now()}`;
+}
+
+/** 智能构建流式分析：分阶段事件（抽取对象/关系/行动等）。 */
+export type CopilotAnalyzeStep = {
+  id: string;
+  status: "running" | "done";
+  label: string;
+  detail?: string;
+  ms?: number;
+  error?: string;
+};
+
+export type AnalyzeCopilotStreamOptions = AnalyzeCopilotOptions & {
+  onStep?: (step: CopilotAnalyzeStep) => void;
+};
+
+/** 与 analyzeCopilot 相同，但通过 NDJSON 流式返回阶段进度，便于界面展示构建过程。 */
+export async function analyzeCopilotStream({
+  onStep,
+  ...options
+}: AnalyzeCopilotStreamOptions): Promise<AnalyzeCopilotResult> {
+  const form = new FormData();
+  form.append("text", options.text);
+  if (options.networkName) {
+    form.append("networkName", options.networkName);
+  }
+  for (const file of options.reportFiles ?? []) {
+    form.append("reportFiles", file, file.name);
+  }
+  for (const file of options.dataFiles ?? []) {
+    form.append("dataFiles", file, file.name);
+  }
+
+  const response = await fetch("/api/copilot/analyze/stream", {
+    method: "POST",
+    headers: withAuthHeaders(),
+    body: form,
+  });
+  if (!response.ok || !response.body) {
+    return { ok: false, errors: [`HTTP ${response.status}`] };
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let final: AnalyzeCopilotResult | null = null;
+
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let index = buffer.indexOf("\n");
+    while (index >= 0) {
+      const line = buffer.slice(0, index).trim();
+      buffer = buffer.slice(index + 1);
+      index = buffer.indexOf("\n");
+      if (!line) continue;
+      let event: Record<string, unknown>;
+      try {
+        event = JSON.parse(line) as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+      if (event.type === "step") {
+        onStep?.(event as unknown as CopilotAnalyzeStep);
+      } else if (event.type === "result") {
+        if (event.ok && event.ir) {
+          final = {
+            ok: true,
+            mode: (event.mode as "llm" | "heuristic" | undefined) ?? "heuristic",
+            llmError: event.llmError as string | undefined,
+            ir: event.ir as CopilotIr,
+            warnings: (event.warnings as string[] | undefined) ?? [],
+          };
+        } else {
+          final = { ok: false, errors: (event.errors as string[] | undefined) ?? ["分析失败"] };
+        }
+      }
+    }
+  }
+
+  return final ?? { ok: false, errors: ["未收到分析结果"] };
 }

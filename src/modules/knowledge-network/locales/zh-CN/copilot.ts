@@ -27,6 +27,7 @@ export const copilotPart = {
   copilotStreaming: "正在接收模型输出…",
   copilotGenerate: "生成本体草案",
   copilotGenerating: "正在生成草案…",
+  copilotSelfCheck: "自检草案",
   copilotDraftTitle: "本体草案",
   copilotDraftSummary: "{{objects}} 个对象类型 · {{relations}} 条关系",
   copilotBindingHint: "已推断数据绑定：{{bound}}/{{total}} 个对象匹配到来源表",

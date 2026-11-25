@@ -26,6 +26,7 @@ import { useTranslation } from "react-i18next";
 import { AppButton } from "@/framework/ui/common/AppButton";
 import {
   listDataImportDatasets,
+  listDataImportSheets,
   listDataImportSpaces,
   listDataImportConnections,
   listDataImportRelationMappings,
@@ -39,6 +40,7 @@ import {
   saveDataImportRelationMapping,
   type DataImportConnection,
   type DataImportDataset,
+  type DataImportSheet,
   type DataImportLastImport,
   type DataImportTable,
   type DataImportFilePreview,
@@ -69,6 +71,8 @@ export function DataImportWizard({ networkId, onClose, onImported, open }: DataI
   const [datasets, setDatasets] = useState<DataImportDataset[]>([]);
   const [spaceId, setSpaceId] = useState("");
   const [datasetId, setDatasetId] = useState("");
+  const [sheets, setSheets] = useState<DataImportSheet[]>([]);
+  const [sheetName, setSheetName] = useState("");
   const [sourceMode, setSourceMode] = useState<"dataset" | "file" | "connection">("dataset");
   const [file, setFile] = useState<File | null>(null);
   const [filePreview, setFilePreview] = useState<DataImportFilePreview | null>(null);
@@ -97,11 +101,15 @@ export function DataImportWizard({ networkId, onClose, onImported, open }: DataI
     Record<string, { source: string; target: string }>
   >({});
   const [savingRelationId, setSavingRelationId] = useState("");
+  const [autoCreateRelationProperty, setAutoCreateRelationProperty] = useState(true);
+  const [propertyNotice, setPropertyNotice] = useState("");
 
   const resetState = useCallback(() => {
     setStep(0);
     setDatasets([]);
     setDatasetId("");
+    setSheets([]);
+    setSheetName("");
     setFile(null);
     setFilePreview(null);
     setSourceMode("dataset");
@@ -175,6 +183,35 @@ export function DataImportWizard({ networkId, onClose, onImported, open }: DataI
   );
 
   useEffect(() => {
+    if (!open || !spaceId || !datasetId) {
+      setSheets([]);
+      setSheetName("");
+      return;
+    }
+    let cancelled = false;
+    void listDataImportSheets(spaceId, datasetId)
+      .then((items) => {
+        if (cancelled) return;
+        setSheets(items);
+        const largest = items.reduce<DataImportSheet | null>(
+          (best, item) => (best === null || item.rowCount > best.rowCount ? item : best),
+          null,
+        );
+        const onlySheet = items.length === 1 ? items[0].name : "";
+        setSheetName(items.length > 1 ? "" : onlySheet || largest?.name || "");
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSheets([]);
+          setSheetName("");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, spaceId, datasetId]);
+
+  useEffect(() => {
     if (sourceMode !== "connection" || connections.length > 0) return;
     setLoadingConnections(true);
     void listDataImportConnections().then((result) => {
@@ -206,14 +243,17 @@ export function DataImportWizard({ networkId, onClose, onImported, open }: DataI
       (max, objectMapping) => Math.max(max, objectMapping.fields.length),
       0,
     );
-    // 多对象类映射时，按行分派由后端行内打分决定：勾选所有能匹配字段的对象类不会串写。
-    const matchedTypes = source.mapping.objects.filter(
-      (objectMapping) => objectMapping.fields.length > 0,
-    );
+    // 多对象类映射时，按行分派由后端行内打分决定：只默认勾选实际能分派到数据行的对象类。
+    const counts = source.stats.byObjectType ?? {};
     const useRowRouting = source.mapping.objects.length > 1;
+    const matchedTypes = source.mapping.objects.filter(
+      (objectMapping) =>
+        objectMapping.fields.length > 0 &&
+        (Object.keys(counts).length === 0 || (counts[objectMapping.objectTypeId] ?? 0) > 0),
+    );
     for (const objectMapping of source.mapping.objects) {
       const preferred = useRowRouting
-        ? objectMapping.fields.length > 0
+        ? matchedTypes.includes(objectMapping)
         : objectMapping.fields.length > 0 && objectMapping.fields.length === maxFields;
       nextExcluded[objectMapping.objectTypeId] = !preferred;
       const fieldNames: Record<string, string> = {};
@@ -286,7 +326,15 @@ export function DataImportWizard({ networkId, onClose, onImported, open }: DataI
         return;
       }
       if (!spaceId || !datasetId) return;
-      const result = await previewDataImport({ spaceId, datasetId, networkId });
+      const result = await previewDataImport({
+        spaceId,
+        datasetId,
+        networkId,
+        sheetName: sheetName || undefined,
+      });
+      if (result.sheets && result.sheets.length > 0) {
+        setSheets(result.sheets);
+      }
       setWatermarkCandidates(result.watermarkCandidates ?? []);
       setLastImport(result.lastImport ?? null);
       applyPreview(result);
@@ -350,7 +398,14 @@ export function DataImportWizard({ networkId, onClose, onImported, open }: DataI
                 mapping,
                 options,
               })
-            : await runDataImport({ spaceId, datasetId, networkId, mapping, options });
+            : await runDataImport({
+                spaceId,
+                datasetId,
+                networkId,
+                mapping,
+                sheetName: sheetName || undefined,
+                options,
+              });
       setReport(result);
       setStep(2);
       onImported?.(result);
@@ -427,14 +482,27 @@ export function DataImportWizard({ networkId, onClose, onImported, open }: DataI
     setSavingRelationId(relation.id);
     setError("");
     try {
-      const item = await saveDataImportRelationMapping({
+      const result = await saveDataImportRelationMapping({
         networkId,
         relationTypeId: relation.id,
         sourceProperty: draft.source,
         targetProperty: draft.target,
+        autoCreate: autoCreateRelationProperty,
       });
       setRelationMappings((current) =>
-        current.map((entry) => (entry.id === item.id ? item : entry)),
+        current.map((entry) => (entry.id === result.item.id ? result.item : entry)),
+      );
+      setPropertyNotice(
+        result.createdProperties.length > 0
+          ? t("knowledgeNetwork.dataImportPropertyCreated", {
+              properties: result.createdProperties
+                .map(
+                  (property) =>
+                    `${property.objectTypeName ?? property.objectTypeId}.${property.propertyName}`,
+                )
+                .join("、"),
+            })
+          : "",
       );
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : String(saveError));
@@ -663,6 +731,22 @@ export function DataImportWizard({ networkId, onClose, onImported, open }: DataI
                   value={datasetId || undefined}
                 />
               </label>
+              {sheets.length > 1 ? (
+                <label className={styles.field}>
+                  <span className={styles.label}>{t("knowledgeNetwork.dataImportSheet")}</span>
+                  <Select
+                    onChange={(value: string) => setSheetName(value)}
+                    options={[
+                      { label: t("knowledgeNetwork.dataImportSheetAll"), value: "" },
+                      ...sheets.map((item) => ({
+                        label: `${item.name || "--"}（${item.rowCount} 条）`,
+                        value: item.name,
+                      })),
+                    ]}
+                    value={sheetName}
+                  />
+                </label>
+              ) : null}
               {selectedDataset ? (
                 <div className={styles.datasetMeta}>
                   <Tag>{selectedDataset.dataType}</Tag>
@@ -860,6 +944,26 @@ export function DataImportWizard({ networkId, onClose, onImported, open }: DataI
               <div style={{ color: "#8c8c8c", fontSize: 12, marginBottom: 6 }}>
                 {t("knowledgeNetwork.dataImportRelationMappingHint")}
               </div>
+              <div style={{ marginBottom: 8 }}>
+                <Checkbox
+                  checked={autoCreateRelationProperty}
+                  onChange={(event) => setAutoCreateRelationProperty(event.target.checked)}
+                >
+                  {t("knowledgeNetwork.dataImportAutoCreateProperty")}
+                </Checkbox>
+                <span style={{ color: "#8c8c8c", fontSize: 12, marginLeft: 8 }}>
+                  {t("knowledgeNetwork.dataImportAutoCreatePropertyHint")}
+                </span>
+              </div>
+              {propertyNotice ? (
+                <Alert
+                  className={styles.alert}
+                  message={propertyNotice}
+                  showIcon
+                  style={{ marginBottom: 8 }}
+                  type="success"
+                />
+              ) : null}
               {relationRows.map((relation) => {
                 const draft = relationDraft[relation.id] ?? {
                   source: relation.sourceProperty,

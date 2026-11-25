@@ -80,6 +80,7 @@ const {
 vi.mock("@/modules/knowledge-network/services/ontology-copilot.service", () => ({
   streamCopilotChat,
   analyzeCopilot,
+  analyzeCopilotStream: analyzeCopilot,
   downloadCopilotBindingKit,
   downloadCopilotPackage,
   compileCopilotKnPayload,

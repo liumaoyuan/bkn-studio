@@ -61,6 +61,13 @@ export type DataImportDataset = {
   lastIngestedAt?: string;
 };
 
+export type DataImportSheet = {
+  name: string;
+  index: number;
+  rowCount: number;
+  columns: string[];
+};
+
 export type DataImportFieldType = "string" | "number" | "boolean" | "datetime";
 
 export type DataImportFieldMapping = {
@@ -115,6 +122,8 @@ export type DataImportLastImport = {
 
 export type DataImportPreview = {
   dataset: DataImportDataset;
+  sheets?: DataImportSheet[];
+  sheetName?: string;
   mapping: DataImportMapping;
   objectTypes: DataImportObjectType[];
   warnings: string[];
@@ -186,11 +195,23 @@ export async function listDataImportDatasets(spaceId: string): Promise<DataImpor
   return payload.datasets ?? [];
 }
 
+export async function listDataImportSheets(
+  spaceId: string,
+  datasetId: string,
+): Promise<DataImportSheet[]> {
+  const payload = await requestJson<{ ok: boolean; sheets?: DataImportSheet[] }>(
+    `${DATASETS_PATH}/${encodeURIComponent(datasetId)}/sheets?spaceId=${encodeURIComponent(spaceId)}`,
+    { method: "GET" },
+  );
+  return payload.sheets ?? [];
+}
+
 export async function previewDataImport(input: {
   spaceId: string;
   datasetId: string;
   networkId: string;
   mapping?: DataImportMapping;
+  sheetName?: string;
 }): Promise<DataImportPreview> {
   const payload = await requestJson<{ ok: boolean } & DataImportPreview>(PREVIEW_PATH, {
     method: "POST",
@@ -286,6 +307,7 @@ export async function runDataImport(input: {
   datasetId: string;
   networkId: string;
   mapping: DataImportMapping;
+  sheetName?: string;
   options?: DataImportWriteOptions;
 }): Promise<DataImportReport> {
   const payload = await requestJson<{ ok: boolean; report: DataImportReport }>(IMPORT_PATH, {
@@ -295,6 +317,7 @@ export async function runDataImport(input: {
       datasetId: input.datasetId,
       networkId: input.networkId,
       mapping: input.mapping,
+      sheetName: input.sheetName,
       ...(input.options ?? {}),
     }),
   });
@@ -324,17 +347,26 @@ export async function listDataImportRelationMappings(
   return payload.items ?? [];
 }
 
+export type DataImportCreatedProperty = {
+  objectTypeId: string;
+  objectTypeName?: string;
+  propertyName: string;
+  side: "source" | "target";
+};
+
 export async function saveDataImportRelationMapping(input: {
   networkId: string;
   relationTypeId: string;
   sourceProperty: string;
   targetProperty: string;
-}): Promise<DataImportRelationMapping> {
-  const payload = await requestJson<{ ok: boolean; item: DataImportRelationMapping }>(
-    RELATION_MAPPING_PATH,
-    { method: "POST", body: JSON.stringify(input) },
-  );
-  return payload.item;
+  autoCreate?: boolean;
+}): Promise<{ item: DataImportRelationMapping; createdProperties: DataImportCreatedProperty[] }> {
+  const payload = await requestJson<{
+    ok: boolean;
+    item: DataImportRelationMapping;
+    createdProperties?: DataImportCreatedProperty[];
+  }>(RELATION_MAPPING_PATH, { method: "POST", body: JSON.stringify(input) });
+  return { item: payload.item, createdProperties: payload.createdProperties ?? [] };
 }
 
 export type DataImportConnection = {

@@ -29,6 +29,7 @@ export const copilotPart = {
   copilotStreaming: "Receiving model output…",
   copilotGenerate: "Generate draft",
   copilotGenerating: "Generating draft…",
+  copilotSelfCheck: "Self-check",
   copilotDraftTitle: "Ontology draft",
   copilotDraftSummary: "{{objects}} object types · {{relations}} relations",
   copilotBindingHint:

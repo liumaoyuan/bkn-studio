@@ -273,6 +273,10 @@ export const networkPart = {
   dataImportRelationMapping: "Relation mapping (join fields)",
   dataImportRelationMappingHint:
     "Adjust the join fields used by each relation type; changes apply immediately.",
+  dataImportAutoCreateProperty: "Create missing join properties automatically",
+  dataImportAutoCreatePropertyHint:
+    "When saving, missing properties are added to the object type as string fields so relation edges can be built.",
+  dataImportPropertyCreated: "Added join properties: {{properties}}",
   dataImportRelationSource: "Source property",
   dataImportRelationTarget: "Target property",
   dataImportSaveMapping: "Save mapping",
@@ -298,6 +302,8 @@ export const networkPart = {
   dataImportSpace: "Data space",
   dataImportSpacePlaceholder: "Select a data space",
   dataImportDataset: "Dataset",
+  dataImportSheet: "Worksheet",
+  dataImportSheetAll: "All worksheets (row routing)",
   dataImportDatasetPlaceholder: "Select a dataset to import",
   dataImportDatasetMeta: "{{count}} records · target table {{table}}",
   dataImportNothingSelected: "Select at least one object type to import.",
@@ -363,4 +369,19 @@ export const networkPart = {
   dataImportRoutingSummary:
     "{{total}} rows read, {{assigned}} written across {{types}} object types, {{skipped}} skipped, {{deduped}} deduped.",
   dataImportDone: "Done",
+  networkEditTitle: "AI edit",
+  networkEditPlaceholder:
+    "Describe the change, e.g. rename Organization to Command, and add a hull number property to Ship",
+  networkEditPlan: "Generate plan",
+  networkEditPlanning: "Planning…",
+  networkEditApply: "Apply changes",
+  networkEditApplying: "Applying…",
+  networkEditRollback: "Roll back",
+  networkEditReply: "Summary",
+  networkEditOps: "Planned changes",
+  networkEditWarnings: "Warnings",
+  networkEditResult: "Result",
+  networkEditNoOps: "No executable change was produced.",
+  networkEditApplied: "Applied {{ok}}/{{total}} change(s).",
+  networkEditRolledBack: "Rolled back {{count}} item(s).",
 };

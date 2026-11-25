@@ -7,6 +7,7 @@
 
 import {
   ApartmentOutlined,
+  RobotOutlined,
   ApiOutlined,
   ClockCircleOutlined,
   CopyOutlined,
@@ -36,6 +37,7 @@ import { hasKnowledgeNetworkRecordOperation } from "@/modules/knowledge-network/
 import { ObjectAuthorizeDrawer } from "@/modules/system-admin/components/ObjectAuthorizeDrawer";
 import { DataImportWizard } from "@/modules/knowledge-network/components/data-import/DataImportWizard";
 import { DataProvenanceDrawer } from "@/modules/knowledge-network/components/data-import/DataProvenanceDrawer";
+import { NetworkEditModal } from "@/modules/knowledge-network/components/network-edit/NetworkEditModal";
 import { OverviewOntologyBlock } from "@/modules/knowledge-network/components/preview/OverviewOntologyBlock";
 import { MarkdownText } from "@/framework/ui/common/MarkdownText";
 import { renderResourceIcon } from "@/modules/knowledge-network/components/shared/ResourceIconSelect";
@@ -77,6 +79,7 @@ export function WorkspaceOverviewSection({
   const [authorizeOpen, setAuthorizeOpen] = useState(false);
   const [dataImportOpen, setDataImportOpen] = useState(false);
   const [provenanceOpen, setProvenanceOpen] = useState(false);
+  const [networkEditOpen, setNetworkEditOpen] = useState(false);
   // Judged on the record's own operations, not on a platform permission point. bkn-backend writes
   // `authorize` to whoever created the network, so this is what "I made it, I may share it" looks
   // like; admin-authz:grant is a platform-administrator capability that a builder never holds, and
@@ -198,6 +201,11 @@ export function WorkspaceOverviewSection({
               {detail ? (
                 <AppButton icon={<ApartmentOutlined />} onClick={() => setProvenanceOpen(true)}>
                   {t("knowledgeNetwork.dataProvenanceTitle")}
+                </AppButton>
+              ) : null}
+              {detail ? (
+                <AppButton icon={<RobotOutlined />} onClick={() => setNetworkEditOpen(true)}>
+                  {t("knowledgeNetwork.networkEditTitle")}
                 </AppButton>
               ) : null}
               {detail && canModify ? (
@@ -391,6 +399,15 @@ export function WorkspaceOverviewSection({
           networkId={networkId}
           onClose={() => setProvenanceOpen(false)}
           open={provenanceOpen}
+        />
+      ) : null}
+
+      {detail ? (
+        <NetworkEditModal
+          networkId={networkId}
+          onApplied={loadRecentObjects}
+          onClose={() => setNetworkEditOpen(false)}
+          open={networkEditOpen}
         />
       ) : null}
 
