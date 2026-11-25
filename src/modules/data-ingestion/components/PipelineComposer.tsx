@@ -1,5 +1,12 @@
 /**
  * Copyright (c) 2026 OpenBKN
+ * SPDX-License-Identifier: LicenseRef-OpenBKN
+ * Licensed under the OpenBKN License, a modified Apache 2.0 with Additional
+ * Conditions. See LICENSE for the full text.
+ */
+
+/**
+ * Copyright (c) 2026 OpenBKN
  * SPDX-License-Identifier: OpenBKN
  * Licensed under the OpenBKN License, a modified Apache 2.0 with Additional
  * Conditions. See LICENSE for the full text.
@@ -99,7 +106,8 @@ function parseParameterValue(argument: ToolArgument, raw: string) {
     return { present: true, value: parsed };
   }
   if (argument.type === "object" || argument.type === "array") {
-    return { present: true, value: JSON.parse(value) };
+    const parsed: unknown = JSON.parse(value);
+    return { present: true, value: parsed };
   }
   return { present: true, value: raw };
 }
@@ -321,7 +329,7 @@ export function PipelineComposerModal({
         }
         let customParameters: Record<string, unknown> = {};
         if (step.customParameters.trim()) {
-          const parsed = JSON.parse(step.customParameters);
+          const parsed: unknown = JSON.parse(step.customParameters);
           if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
             throw new Error(t("dataIngestion.pipelines.customParametersInvalid"));
           }
@@ -708,7 +716,7 @@ export function PipelineRunModal({
         }
         const rawArguments = rawStepValues[step.key]?.trim();
         if (rawArguments) {
-          const parsed = JSON.parse(rawArguments);
+          const parsed: unknown = JSON.parse(rawArguments);
           if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
             throw new Error(t("dataIngestion.pipelines.customParametersInvalid"));
           }

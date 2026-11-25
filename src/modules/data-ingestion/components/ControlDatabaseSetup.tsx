@@ -20,6 +20,7 @@ import {
   Input,
   InputNumber,
   Row,
+  Select,
   Space,
   Switch,
   Tag,
@@ -31,10 +32,12 @@ import { useTranslation } from "react-i18next";
 import { useAppServices } from "@/framework/context/use-app-services";
 import { extractRequestErrorMessage } from "@/framework/request/error-message";
 import {
-  buildMysqlConnectionUrl,
+  buildControlDatabaseConnectionUrl,
   DEFAULT_CONTROL_DATABASE_NAME,
   DEFAULT_MYSQL_PORT,
+  DEFAULT_POSTGRESQL_PORT,
   normalizeMysqlHost,
+  type ControlDatabaseEngine,
 } from "@/modules/data-ingestion/lib/mysql-connection-url";
 import { dataIngestionService } from "@/modules/data-ingestion/services/data-ingestion.service";
 import type {
@@ -47,12 +50,13 @@ import { DatabaseConnectionPicker } from "./DatabaseConnectionPicker";
 import styles from "./ControlDatabaseSetup.module.css";
 
 const { Paragraph, Text, Title } = Typography;
-const MYSQL_URL_PATTERN = /^(mysql|mariadb)\+pymysql:\/\//;
+const CONTROL_DATABASE_URL_PATTERN = /^(?:(?:mysql|mariadb)\+pymysql|postgresql\+psycopg):\/\//;
 const MYSQL_DATABASE_NAME_PATTERN = /^[A-Za-z0-9_]+$/;
 
 interface ControlDatabaseSetupValues {
   bootstrap_database_url?: string;
   create_database: boolean;
+  database_type: ControlDatabaseEngine;
   database_name: string;
   host: string;
   password: string;
@@ -72,6 +76,7 @@ export function ControlDatabaseSetup({
   const { t } = useTranslation();
   const { message } = useAppServices();
   const [form] = Form.useForm<ControlDatabaseSetupValues>();
+  const databaseType = Form.useWatch("database_type", form) ?? "mysql";
   const [testing, setTesting] = useState(false);
   const [initializing, setInitializing] = useState(false);
   const [operationError, setOperationError] = useState("");
@@ -80,7 +85,7 @@ export function ControlDatabaseSetup({
   const optionalBootstrapUrlRules = [
     {
       validator: (_rule: unknown, value?: string) => {
-        if (!value || MYSQL_URL_PATTERN.test(value)) {
+        if (!value || CONTROL_DATABASE_URL_PATTERN.test(value)) {
           return Promise.resolve();
         }
         return Promise.reject(new Error(t("dataIngestion.controlDatabase.invalidBootstrapUrl")));
@@ -91,13 +96,16 @@ export function ControlDatabaseSetup({
   async function readForm(): Promise<DataIngestionControlDatabaseRequest> {
     const values = await form.validateFields();
     return {
-      database_url: buildMysqlConnectionUrl({
-        databaseName: values.database_name,
-        host: values.host,
-        password: values.password || "",
-        port: values.port,
-        username: values.username,
-      }),
+      database_url: buildControlDatabaseConnectionUrl(
+        {
+          databaseName: values.database_name,
+          host: values.host,
+          password: values.password || "",
+          port: values.port,
+          username: values.username,
+        },
+        values.database_type,
+      ),
       create_database: values.create_database,
       bootstrap_database_url: values.bootstrap_database_url?.trim() || undefined,
     };
@@ -128,13 +136,16 @@ export function ControlDatabaseSetup({
     try {
       const values = await form.validateFields();
       const request = {
-        database_url: buildMysqlConnectionUrl({
-          databaseName: values.database_name,
-          host: values.host,
-          password: values.password || "",
-          port: values.port,
-          username: values.username,
-        }),
+        database_url: buildControlDatabaseConnectionUrl(
+          {
+            databaseName: values.database_name,
+            host: values.host,
+            password: values.password || "",
+            port: values.port,
+            username: values.username,
+          },
+          values.database_type,
+        ),
         create_database: values.create_database,
         bootstrap_database_url: values.bootstrap_database_url?.trim() || undefined,
       };
@@ -216,6 +227,7 @@ export function ControlDatabaseSetup({
             initialValues={{
               create_database: true,
               database_name: DEFAULT_CONTROL_DATABASE_NAME,
+              database_type: "mysql",
               host: "",
               password: "",
               port: DEFAULT_MYSQL_PORT,
@@ -229,7 +241,47 @@ export function ControlDatabaseSetup({
             }}
             requiredMark="optional"
           >
-            <DatabaseConnectionPicker form={form} />
+            <DatabaseConnectionPicker
+              form={form}
+              onConnectorTypeChange={(connectorType) => {
+                const nextType: ControlDatabaseEngine =
+                  connectorType === "postgres" || connectorType === "postgresql"
+                    ? "postgresql"
+                    : "mysql";
+                form.setFieldsValue({
+                  database_type: nextType,
+                  port: nextType === "postgresql" ? DEFAULT_POSTGRESQL_PORT : DEFAULT_MYSQL_PORT,
+                });
+              }}
+            />
+
+            <Form.Item
+              extra={t("dataIngestion.controlDatabase.databaseTypeHint")}
+              label={t("dataIngestion.controlDatabase.databaseType")}
+              name="database_type"
+            >
+              <Select
+                onChange={(value: ControlDatabaseEngine) => {
+                  form.setFieldValue(
+                    "port",
+                    value === "postgresql" ? DEFAULT_POSTGRESQL_PORT : DEFAULT_MYSQL_PORT,
+                  );
+                  form.setFieldValue("bootstrap_database_url", "");
+                  setOperationError("");
+                  setTestResult(null);
+                }}
+                options={[
+                  {
+                    label: t("dataIngestion.controlDatabase.databaseTypes.mysql"),
+                    value: "mysql",
+                  },
+                  {
+                    label: t("dataIngestion.controlDatabase.databaseTypes.postgresql"),
+                    value: "postgresql",
+                  },
+                ]}
+              />
+            </Form.Item>
 
             <Row gutter={16}>
               <Col sm={17} xs={24}>
@@ -264,7 +316,11 @@ export function ControlDatabaseSetup({
               </Col>
               <Col sm={7} xs={24}>
                 <Form.Item
-                  extra={t("dataIngestion.controlDatabase.portHint")}
+                  extra={t(
+                    databaseType === "postgresql"
+                      ? "dataIngestion.controlDatabase.postgresqlPortHint"
+                      : "dataIngestion.controlDatabase.mysqlPortHint",
+                  )}
                   label={t("dataIngestion.controlDatabase.port")}
                   name="port"
                   rules={[
@@ -365,7 +421,11 @@ export function ControlDatabaseSetup({
                     >
                       <Input.Password
                         autoComplete="new-password"
-                        placeholder={t("dataIngestion.controlDatabase.bootstrapUrlPlaceholder")}
+                        placeholder={t(
+                          databaseType === "postgresql"
+                            ? "dataIngestion.controlDatabase.postgresqlBootstrapUrlPlaceholder"
+                            : "dataIngestion.controlDatabase.bootstrapUrlPlaceholder",
+                        )}
                       />
                     </Form.Item>
                   ),

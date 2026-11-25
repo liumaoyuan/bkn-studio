@@ -16,6 +16,7 @@ import {
   InputNumber,
   Modal,
   Row,
+  Select,
   Space,
   Switch,
   Typography,
@@ -26,10 +27,12 @@ import { useTranslation } from "react-i18next";
 import { useAppServices } from "@/framework/context/use-app-services";
 import { extractRequestErrorMessage } from "@/framework/request/error-message";
 import {
-  buildMysqlConnectionUrl,
+  buildControlDatabaseConnectionUrl,
   DEFAULT_CONTROL_DATABASE_NAME,
   DEFAULT_MYSQL_PORT,
+  DEFAULT_POSTGRESQL_PORT,
   normalizeMysqlHost,
+  type ControlDatabaseEngine,
 } from "@/modules/data-ingestion/lib/mysql-connection-url";
 import { dataIngestionService } from "@/modules/data-ingestion/services/data-ingestion.service";
 import type { DataIngestionControlDatabaseStatus } from "@/modules/data-ingestion/types/data-ingestion";
@@ -38,13 +41,14 @@ import { DatabaseConnectionPicker } from "./DatabaseConnectionPicker";
 import styles from "./ControlDatabaseSetup.module.css";
 
 const { Paragraph, Text } = Typography;
-const MYSQL_URL_PATTERN = /^(mysql|mariadb)\+pymysql:\/\//;
+const CONTROL_DATABASE_URL_PATTERN = /^(?:(?:mysql|mariadb)\+pymysql|postgresql\+psycopg):\/\//;
 const MYSQL_DATABASE_NAME_PATTERN = /^[A-Za-z0-9_]+$/;
 
 interface ControlDatabaseSwitchValues {
   bootstrap_database_url?: string;
   confirm_switch: boolean;
   create_database: boolean;
+  database_type: ControlDatabaseEngine;
   database_name: string;
   host: string;
   password: string;
@@ -66,19 +70,23 @@ export function ControlDatabaseSwitchModal({
   const { t } = useTranslation();
   const { message } = useAppServices();
   const [form] = Form.useForm<ControlDatabaseSwitchValues>();
+  const databaseType = Form.useWatch("database_type", form) ?? "mysql";
   const [switching, setSwitching] = useState(false);
 
   async function submit() {
     const values = await form.validateFields();
     setSwitching(true);
     try {
-      const databaseUrl = buildMysqlConnectionUrl({
-        databaseName: values.database_name,
-        host: values.host,
-        password: values.password || "",
-        port: values.port,
-        username: values.username,
-      });
+      const databaseUrl = buildControlDatabaseConnectionUrl(
+        {
+          databaseName: values.database_name,
+          host: values.host,
+          password: values.password || "",
+          port: values.port,
+          username: values.username,
+        },
+        values.database_type,
+      );
       const nextStatus = await dataIngestionService.configureControlDatabase({
         database_url: databaseUrl,
         create_database: values.create_database,
@@ -157,6 +165,7 @@ export function ControlDatabaseSwitchModal({
             initialValues={{
               create_database: true,
               database_name: DEFAULT_CONTROL_DATABASE_NAME,
+              database_type: "mysql",
               host: "",
               password: "",
               port: DEFAULT_MYSQL_PORT,
@@ -167,7 +176,45 @@ export function ControlDatabaseSwitchModal({
             layout="vertical"
             requiredMark="optional"
           >
-            <DatabaseConnectionPicker form={form} />
+            <DatabaseConnectionPicker
+              form={form}
+              onConnectorTypeChange={(connectorType) => {
+                const nextType: ControlDatabaseEngine =
+                  connectorType === "postgres" || connectorType === "postgresql"
+                    ? "postgresql"
+                    : "mysql";
+                form.setFieldsValue({
+                  database_type: nextType,
+                  port: nextType === "postgresql" ? DEFAULT_POSTGRESQL_PORT : DEFAULT_MYSQL_PORT,
+                });
+              }}
+            />
+
+            <Form.Item
+              extra={t("dataIngestion.controlDatabase.databaseTypeHint")}
+              label={t("dataIngestion.controlDatabase.databaseType")}
+              name="database_type"
+            >
+              <Select
+                onChange={(value: ControlDatabaseEngine) => {
+                  form.setFieldValue(
+                    "port",
+                    value === "postgresql" ? DEFAULT_POSTGRESQL_PORT : DEFAULT_MYSQL_PORT,
+                  );
+                  form.setFieldValue("bootstrap_database_url", "");
+                }}
+                options={[
+                  {
+                    label: t("dataIngestion.controlDatabase.databaseTypes.mysql"),
+                    value: "mysql",
+                  },
+                  {
+                    label: t("dataIngestion.controlDatabase.databaseTypes.postgresql"),
+                    value: "postgresql",
+                  },
+                ]}
+              />
+            </Form.Item>
 
             <Row gutter={16}>
               <Col sm={17} xs={24}>
@@ -202,7 +249,11 @@ export function ControlDatabaseSwitchModal({
               </Col>
               <Col sm={7} xs={24}>
                 <Form.Item
-                  extra={t("dataIngestion.controlDatabase.portHint")}
+                  extra={t(
+                    databaseType === "postgresql"
+                      ? "dataIngestion.controlDatabase.postgresqlPortHint"
+                      : "dataIngestion.controlDatabase.mysqlPortHint",
+                  )}
                   label={t("dataIngestion.controlDatabase.port")}
                   name="port"
                   rules={[
@@ -302,7 +353,7 @@ export function ControlDatabaseSwitchModal({
                       rules={[
                         {
                           validator: (_rule, value?: string) => {
-                            if (!value || MYSQL_URL_PATTERN.test(value)) {
+                            if (!value || CONTROL_DATABASE_URL_PATTERN.test(value)) {
                               return Promise.resolve();
                             }
                             return Promise.reject(
@@ -314,7 +365,11 @@ export function ControlDatabaseSwitchModal({
                     >
                       <Input.Password
                         autoComplete="new-password"
-                        placeholder={t("dataIngestion.controlDatabase.bootstrapUrlPlaceholder")}
+                        placeholder={t(
+                          databaseType === "postgresql"
+                            ? "dataIngestion.controlDatabase.postgresqlBootstrapUrlPlaceholder"
+                            : "dataIngestion.controlDatabase.bootstrapUrlPlaceholder",
+                        )}
                       />
                     </Form.Item>
                   ),

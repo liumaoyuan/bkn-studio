@@ -21,9 +21,11 @@ const { Text } = Typography;
 export function DatabaseConnectionPicker({
   form,
   onReset,
+  onConnectorTypeChange,
 }: {
   form: FormInstance;
   onReset?: () => void;
+  onConnectorTypeChange?: (connectorType: string) => void;
 }) {
   const { t } = useTranslation();
   const [connections, setConnections] = useState<DatabaseConnectionOption[]>([]);
@@ -71,6 +73,9 @@ export function DatabaseConnectionPicker({
 
     const connection = connections.find((item) => item.id === connectionId) ?? null;
     setSelectedConnection(connection);
+    if (connection) {
+      onConnectorTypeChange?.(connection.connectorType);
+    }
     setLoadingDetails(true);
     try {
       const defaults = connection?.defaults ?? (await getDatabaseConnectionDefaults(connectionId));
