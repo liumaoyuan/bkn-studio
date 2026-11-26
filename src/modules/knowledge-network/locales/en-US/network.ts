@@ -381,8 +381,10 @@ export const networkPart = {
   networkEditReply: "Summary",
   networkEditOps: "Planned changes",
   networkEditWarnings: "Warnings",
+  networkEditModelHint: "Platform model: {{model}}",
   networkEditResult: "Result",
   networkEditNoOps: "No executable change was produced.",
   networkEditApplied: "Applied {{ok}}/{{total}} change(s).",
   networkEditRolledBack: "Rolled back {{count}} item(s).",
+  copilotImportNothingSelected: "Select at least one object type before importing.",
 };

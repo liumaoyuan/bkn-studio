@@ -1181,11 +1181,13 @@ export type CopilotAnalyzeStep = {
 
 export type AnalyzeCopilotStreamOptions = AnalyzeCopilotOptions & {
   onStep?: (step: CopilotAnalyzeStep) => void;
+  signal?: AbortSignal;
 };
 
 /** 与 analyzeCopilot 相同，但通过 NDJSON 流式返回阶段进度，便于界面展示构建过程。 */
 export async function analyzeCopilotStream({
   onStep,
+  signal,
   ...options
 }: AnalyzeCopilotStreamOptions): Promise<AnalyzeCopilotResult> {
   const form = new FormData();
@@ -1204,6 +1206,7 @@ export async function analyzeCopilotStream({
     method: "POST",
     headers: withAuthHeaders(),
     body: form,
+    signal,
   });
   if (!response.ok || !response.body) {
     return { ok: false, errors: [`HTTP ${response.status}`] };

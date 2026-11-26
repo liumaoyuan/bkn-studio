@@ -198,4 +198,14 @@ export const copilotPart = {
   copilotIndexDone:
     "索引任务完成：成功 {{completed}} 个、失败 {{failed}} 个；全文 {{fulltext}} 个字段、向量 {{vector}} 个字段{{warning}}",
   copilotIndexFailed: "建索引失败：{{error}}",
+  copilotProgressRunning: "正在构建本体",
+  copilotProgressDone: "构建完成",
+  copilotProgressFailed: "构建失败",
+  copilotProgressWaiting: "准备中",
+  copilotProgressSteps: "共 {{count}} 步",
+  copilotProgressExpand: "展开构建过程",
+  copilotProgressCollapse: "收起构建过程",
+  copilotProgressCancel: "取消构建",
+  copilotProgressNext: "继续下一步",
+  copilotAnalyzeCancelled: "已取消本次构建",
 } as const;

@@ -363,8 +363,10 @@ export const networkPart = {
   networkEditReply: "变更说明",
   networkEditOps: "计划变更",
   networkEditWarnings: "风险提示",
+  networkEditModelHint: "使用平台模型：{{model}}",
   networkEditResult: "执行结果",
   networkEditNoOps: "模型认为不需要改动，或没有生成可执行变更。",
   networkEditApplied: "已执行 {{ok}}/{{total}} 条变更。",
   networkEditRolledBack: "已回滚 {{count}} 项改动。",
+  copilotImportNothingSelected: "请至少勾选一个对象类后再导入平台。",
 };

@@ -115,3 +115,45 @@
   color: var(--color-text-quaternary, #bfbfbf);
   font-variant-numeric: tabular-nums;
 }
+
+.progressCard {
+  padding: 10px 12px;
+  border: 1px solid rgba(22, 119, 255, 0.25);
+  border-radius: 10px;
+  background: rgba(22, 119, 255, 0.04);
+}
+
+.progressHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #1677ff;
+}
+
+.progressElapsed {
+  margin-left: auto;
+  color: var(--color-text-tertiary, #8c8c8c);
+  font-variant-numeric: tabular-nums;
+}
+
+.step[data-status="running"] .stepIcon {
+  color: #1677ff;
+  animation: networkEditPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes networkEditPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.modelHint {
+  margin: 0;
+  color: rgba(0, 0, 0, 0.45);
+  font-size: 12px;
+}
