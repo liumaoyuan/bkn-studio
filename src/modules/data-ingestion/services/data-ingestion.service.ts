@@ -296,7 +296,7 @@ export const dataIngestionService = {
     body.append("name", payload.name);
     body.append("description", payload.description);
     body.append("data_type", payload.data_type);
-    body.append("storage_mode", payload.storage_mode ?? "auto");
+    body.append("storage_mode", payload.storage_mode ?? "dedicated");
     body.append("upsert_keys", (payload.upsert_keys ?? []).join(","));
     return scopedHttp.post<DataIngestionDataset>(`${PREFIX}/datasets`, body).then((r) => r.data);
   },
@@ -665,7 +665,7 @@ export const dataIngestionService = {
 
   runScanJob: (jobId: string) =>
     scopedHttp
-      .post<DataIngestionAutoScanJob>(`${PREFIX}/auto-scan/jobs/${jobId}/run`)
+      .post<DataIngestionAutoScanJob>(`${PREFIX}/auto-scan/jobs/${jobId}/run?wait=false`)
       .then((r) => r.data),
 
   runSourceIngestion: async (payload: {
@@ -692,14 +692,22 @@ export const dataIngestionService = {
       .then((response) => response.data);
     try {
       const completedJob = await scopedHttp
-        .post<DataIngestionAutoScanJob>(`${PREFIX}/auto-scan/jobs/${job.id}/run?drain=true`)
+        .post<DataIngestionAutoScanJob>(
+          `${PREFIX}/auto-scan/jobs/${job.id}/run?drain=${
+            payload.scanType === "database" ? "false" : "true"
+          }`,
+        )
         .then((response) => response.data);
       const run = completedJob.last_run_id
         ? await scopedHttp
             .get<DataIngestionRun>(`${PREFIX}/runs/${encodeURIComponent(completedJob.last_run_id)}`)
             .then((response) => response.data)
         : null;
-      return { job: completedJob, run };
+      return {
+        job: completedJob,
+        run,
+        unchanged: completedJob.scan_state?.unchanged === true,
+      };
     } finally {
       await scopedHttp
         .delete<{ deleted: boolean }>(`${PREFIX}/auto-scan/jobs/${job.id}`)

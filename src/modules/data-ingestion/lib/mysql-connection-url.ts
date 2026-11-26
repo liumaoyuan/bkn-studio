@@ -19,6 +19,17 @@ export const DEFAULT_MYSQL_PORT = 3306;
 export const DEFAULT_POSTGRESQL_PORT = 5432;
 export const DEFAULT_CONTROL_DATABASE_NAME = "openbkn_data_ingestion";
 
+export function controlDatabaseEngineForConnectorType(
+  connectorType: string,
+): ControlDatabaseEngine {
+  const normalized = connectorType.trim().toLowerCase();
+  return normalized === "postgres" || normalized === "postgresql" ? "postgresql" : "mysql";
+}
+
+export function defaultControlDatabasePort(engine: ControlDatabaseEngine): number {
+  return engine === "postgresql" ? DEFAULT_POSTGRESQL_PORT : DEFAULT_MYSQL_PORT;
+}
+
 function splitMysqlEndpoint(hostValue: string, portValue: number | string) {
   const value = hostValue.trim();
   const bracketed = /^\[([^\]]+)\](?::(\d+))?$/.exec(value);
