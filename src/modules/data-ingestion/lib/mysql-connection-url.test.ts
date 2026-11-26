@@ -10,9 +10,23 @@ import { describe, expect, it } from "vitest";
 import {
   buildControlDatabaseConnectionUrl,
   buildPostgresqlConnectionUrl,
+  controlDatabaseEngineForConnectorType,
+  defaultControlDatabasePort,
 } from "./mysql-connection-url";
 
 describe("control database connection URLs", () => {
+  it("maps PostgreSQL connection types to the PostgreSQL engine and default port", () => {
+    expect(controlDatabaseEngineForConnectorType("postgres")).toBe("postgresql");
+    expect(controlDatabaseEngineForConnectorType("PostgreSQL")).toBe("postgresql");
+    expect(defaultControlDatabasePort("postgresql")).toBe(5432);
+  });
+
+  it("maps MySQL and MariaDB connection types to the MySQL engine and default port", () => {
+    expect(controlDatabaseEngineForConnectorType("mysql")).toBe("mysql");
+    expect(controlDatabaseEngineForConnectorType("mariadb")).toBe("mysql");
+    expect(defaultControlDatabasePort("mysql")).toBe(3306);
+  });
+
   it("builds a PostgreSQL URL with the default port", () => {
     expect(
       buildPostgresqlConnectionUrl({

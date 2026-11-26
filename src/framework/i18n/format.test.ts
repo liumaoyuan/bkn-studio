@@ -55,4 +55,16 @@ describe("locale format helpers", () => {
     expect(formatDateTimeYmdHms(new Date(2026, 5, 3, 11, 42, 20))).toBe("2026-06-03 11:42:20");
     expect(formatDateTimeYmdHms(null)).toBe("-");
   });
+
+  it("converts UTC timestamps to local task timestamps", () => {
+    const timestamp = "2026-11-26T05:30:04Z";
+    const local = new Date(timestamp);
+    const pad = (part: number) => String(part).padStart(2, "0");
+    const expected = `${local.getFullYear()}-${pad(local.getMonth() + 1)}-${pad(
+      local.getDate(),
+    )} ${pad(local.getHours())}:${pad(local.getMinutes())}:${pad(local.getSeconds())}`;
+
+    expect(formatDateTimeYmdHms(timestamp)).toBe(expected);
+    expect(formatDateTimeYmdHms(timestamp)).not.toContain("Z");
+  });
 });

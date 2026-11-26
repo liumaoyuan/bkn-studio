@@ -194,6 +194,7 @@ export interface DataIngestionCustomSkill {
 
 export interface DataIngestionRun {
   id: string;
+  duplicate?: boolean;
   dataset_id: string;
   source_id: string | null;
   template_code: string;

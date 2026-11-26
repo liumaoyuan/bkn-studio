@@ -117,7 +117,7 @@ describe("data-ingestion service", () => {
         sourceId: "source-1",
         templateCode: "tabular_standard",
       }),
-    ).resolves.toEqual({ job: completedJob, run });
+    ).resolves.toEqual({ job: completedJob, run, unchanged: false });
 
     expect(http.post).toHaveBeenNthCalledWith(
       1,
@@ -148,6 +148,50 @@ describe("data-ingestion service", () => {
     expect(http.delete).toHaveBeenCalledWith("/data-ingestion/auto-scan/jobs/job-1", {
       headers: { "x-data-ingestion-space": "default" },
     });
+  });
+
+  it("reports an unchanged database table without creating another run", async () => {
+    const completedJob = {
+      id: "job-db",
+      last_error: "",
+      last_run_id: null,
+      scan_state: { unchanged: true },
+    };
+    http.post
+      .mockResolvedValueOnce({ data: { id: "job-db" } })
+      .mockResolvedValueOnce({ data: completedJob });
+
+    await expect(
+      dataIngestionService.runSourceIngestion({
+        datasetId: "dataset-1",
+        name: "Database ingestion",
+        scanType: "database",
+        sourceId: "source-db",
+        templateCode: "tabular_standard",
+      }),
+    ).resolves.toEqual({ job: completedJob, run: null, unchanged: true });
+
+    expect(http.post).toHaveBeenNthCalledWith(
+      2,
+      "/data-ingestion/auto-scan/jobs/job-db/run?drain=false",
+      undefined,
+      { headers: { "x-data-ingestion-space": "default" } },
+    );
+    expect(http.get).not.toHaveBeenCalled();
+  });
+
+  it("starts an auto-scan without waiting for completion", async () => {
+    http.post.mockResolvedValueOnce({
+      data: { id: "job-1", status: "queued" },
+    });
+
+    await dataIngestionService.runScanJob("job-1");
+
+    expect(http.post).toHaveBeenCalledWith(
+      "/data-ingestion/auto-scan/jobs/job-1/run?wait=false",
+      undefined,
+      { headers: { "x-data-ingestion-space": "default" } },
+    );
   });
 
   it("updates an existing data source in the selected space", async () => {

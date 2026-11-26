@@ -55,6 +55,7 @@ import { useSearchParams } from "react-router-dom";
 
 import { useAppServices } from "@/framework/context/use-app-services";
 import { useRuntimeConfig } from "@/framework/context/use-runtime-config";
+import { formatDateTimeYmdHms as formatTime } from "@/framework/i18n/format";
 import { extractRequestErrorMessage } from "@/framework/request/error-message";
 import { ControlDatabaseSetup } from "@/modules/data-ingestion/components/ControlDatabaseSetup";
 import { ControlDatabaseSwitchModal } from "@/modules/data-ingestion/components/ControlDatabaseSwitchModal";
@@ -67,10 +68,13 @@ import {
 } from "@/modules/data-ingestion/components/PipelineComposer";
 import type { DataIngestionWorkbenchSceneProps } from "@/modules/data-ingestion/contracts/scenes";
 import {
-  buildMysqlConnectionUrl,
+  buildControlDatabaseConnectionUrl,
+  controlDatabaseEngineForConnectorType,
   createDataSpaceSlug,
   DEFAULT_MYSQL_PORT,
   normalizeMysqlHost,
+  defaultControlDatabasePort,
+  type ControlDatabaseEngine,
 } from "@/modules/data-ingestion/lib/mysql-connection-url";
 import { classifySourceConnectionError } from "@/modules/data-ingestion/lib/source-connection-error";
 import {
@@ -103,10 +107,11 @@ import styles from "./DataIngestionWorkbenchScene.module.css";
 
 const { Paragraph, Text, Title } = Typography;
 const DEFAULT_PAGE_SIZE = 20;
-const MYSQL_DATABASE_NAME_PATTERN = /^[A-Za-z0-9_]+$/;
+const DATABASE_NAME_PATTERN = /^[^\s/?#]+$/;
 
 interface DataSpaceFormValues {
   database_name: string;
+  database_type: ControlDatabaseEngine;
   host: string;
   name: string;
   password: string;
@@ -117,7 +122,7 @@ interface DataSpaceFormValues {
 type ImportMode = "files" | "source";
 
 type UploadQueueStatus =
-  "inspecting" | "ready" | "error" | "queued" | "running" | "success" | "failed";
+  "inspecting" | "ready" | "error" | "queued" | "running" | "success" | "failed" | "duplicate";
 
 interface UploadQueueItem {
   id: string;
@@ -135,10 +140,6 @@ function formatBytes(value: number) {
   const units = ["B", "KB", "MB", "GB", "TB"];
   const index = Math.min(Math.floor(Math.log(value) / Math.log(1024)), units.length - 1);
   return `${(value / 1024 ** index).toFixed(index ? 1 : 0)} ${units[index]}`;
-}
-
-function formatTime(value?: string | null) {
-  return value ? value.replace("T", " ").replace(/\.\d+Z?$/, "") : "-";
 }
 
 function displayValue(value: unknown) {
@@ -210,6 +211,9 @@ function stageStatus(stage: DataIngestionStage) {
 }
 
 function statusColor(status: string) {
+  if (status === "duplicate") {
+    return "orange";
+  }
   if (["success", "ready"].includes(status)) {
     return "green";
   }
@@ -275,6 +279,7 @@ function emptySourceForm() {
     sync_mode: "full" as "full" | "incremental",
     table_name: "",
     table_names: [] as string[],
+    primary_keys: [] as string[],
     schema_name: "",
     initial_cursor: "",
     record_path: "",
@@ -537,6 +542,8 @@ export function DataIngestionWorkbenchScene({
   const [spaceModalOpen, setSpaceModalOpen] = useState(false);
   const [creatingSpace, setCreatingSpace] = useState(false);
   const [spaceForm] = Form.useForm<DataSpaceFormValues>();
+  const spaceDatabaseType =
+    (Form.useWatch("database_type", spaceForm) as ControlDatabaseEngine | undefined) ?? "mysql";
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -553,7 +560,7 @@ export function DataIngestionWorkbenchScene({
     name: "",
     description: "",
     data_type: "tabular",
-    storage_mode: "auto" as "auto" | "shared" | "dedicated",
+    storage_mode: "dedicated" as "auto" | "shared" | "dedicated",
     upsert_keys: "",
   });
 
@@ -595,6 +602,8 @@ export function DataIngestionWorkbenchScene({
   );
   const [agentManifest, setAgentManifest] = useState<DataIngestionAgentManifest | null>(null);
   const overviewPollInFlightRef = useRef(false);
+  const liveDataPollInFlightRef = useRef(false);
+  const previousActiveScanJobsRef = useRef(false);
   const drawerPollInFlightRef = useRef(false);
   const scanJobsPollInFlightRef = useRef(false);
   const qualityCheckPollInFlightRef = useRef(false);
@@ -779,6 +788,34 @@ export function DataIngestionWorkbenchScene({
     [activeSpaceId, message, t],
   );
 
+  const loadLiveIngestionData = useCallback(async () => {
+    if (!activeSpaceId || liveDataPollInFlightRef.current) {
+      return;
+    }
+    liveDataPollInFlightRef.current = true;
+    try {
+      const [nextOverview, nextDatasets] = await Promise.all([
+        dataIngestionService.overview(),
+        dataIngestionService.listDatasets(),
+      ]);
+      setOverview(nextOverview);
+      setDatasets(nextDatasets);
+      if (activeView === "catalog" && selectedCatalogDatasetId) {
+        const nextRecords = await dataIngestionService.listRecords(selectedCatalogDatasetId, {
+          page: recordsPage,
+          pageSize: DEFAULT_PAGE_SIZE,
+          query: recordSearch,
+        });
+        setRecords(nextRecords.items);
+        setRecordsTotal(nextRecords.total);
+      }
+    } catch {
+      // A later poll retries transient failures while the task is active.
+    } finally {
+      liveDataPollInFlightRef.current = false;
+    }
+  }, [activeSpaceId, activeView, recordSearch, recordsPage, selectedCatalogDatasetId]);
+
   const loadRecords = useCallback(
     async (datasetId = selectedCatalogDatasetId, page = recordsPage) => {
       if (!activeSpaceId || !datasetId) {
@@ -879,14 +916,31 @@ export function DataIngestionWorkbenchScene({
   }, [activeSpaceId, activeView, loadScanJobs, spacesReady]);
 
   useEffect(() => {
-    if (activeView !== "auto-scan" || !hasActiveScanJobs) {
+    if (!spacesReady || !activeSpaceId) {
       return;
     }
+    void loadScanJobs(true);
     const timer = window.setInterval(() => {
       void loadScanJobs(true);
     }, 2_000);
     return () => window.clearInterval(timer);
-  }, [activeView, hasActiveScanJobs, loadScanJobs]);
+  }, [activeSpaceId, loadScanJobs, spacesReady]);
+
+  useEffect(() => {
+    const wasActive = previousActiveScanJobsRef.current;
+    previousActiveScanJobsRef.current = hasActiveScanJobs;
+    if (!hasActiveScanJobs && !wasActive) {
+      return;
+    }
+    void loadLiveIngestionData();
+    if (!hasActiveScanJobs) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      void loadLiveIngestionData();
+    }, 1_500);
+    return () => window.clearInterval(timer);
+  }, [hasActiveScanJobs, loadLiveIngestionData]);
 
   useEffect(() => {
     if (spacesReady && activeSpaceId && activeView === "catalog") {
@@ -1023,9 +1077,9 @@ export function DataIngestionWorkbenchScene({
       message.error(t("dataIngestion.sources.nameRequired"));
       return;
     }
-    const sourceIsDatabase = ["mysql", "postgres"].includes(sourceForm.source_type);
+    const sourceIsDatabase = ["mysql", "postgres", "postgresql"].includes(sourceForm.source_type);
     if (sourceIsDatabase) {
-      if (!sourceForm.table_names.length) {
+      if (!sourceForm.table_name.trim()) {
         message.error(t("dataIngestion.sources.tableNameRequired"));
         return;
       }
@@ -1068,11 +1122,9 @@ export function DataIngestionWorkbenchScene({
           private_key: sourceForm.private_key || undefined,
           query_mode: sourceIsDatabase ? "table" : undefined,
           sync_mode: sourceIsDatabase ? "full" : undefined,
-          table_name:
-            sourceIsDatabase && sourceForm.table_names.length === 1
-              ? sourceForm.table_name || undefined
-              : undefined,
-          table_names: sourceIsDatabase ? sourceForm.table_names : undefined,
+          table_name: sourceIsDatabase ? sourceForm.table_name.trim() : undefined,
+          table_names: undefined,
+          primary_keys: sourceIsDatabase ? sourceForm.primary_keys : undefined,
           schema_name: sourceIsDatabase ? sourceForm.schema_name || undefined : undefined,
           record_path:
             sourceForm.source_type === "api" ? sourceForm.record_path || undefined : undefined,
@@ -1122,7 +1174,9 @@ export function DataIngestionWorkbenchScene({
       if (tableName) {
         setSourceForm((current) => ({
           ...current,
-          table_name: catalog.table_name || current.table_names[0] || "",
+          table_name: catalog.table_name || current.table_name || "",
+          table_names: catalog.table_name ? [catalog.table_name] : current.table_names.slice(0, 1),
+          primary_keys: catalog.primary_keys,
           schema_name: catalog.schema_name,
           sync_mode: "full",
           watermark_column: "",
@@ -1267,13 +1321,16 @@ export function DataIngestionWorkbenchScene({
   async function saveDataSpace(values: DataSpaceFormValues) {
     setCreatingSpace(true);
     try {
-      const databaseUrl = buildMysqlConnectionUrl({
-        databaseName: values.database_name,
-        host: values.host,
-        password: values.password || "",
-        port: values.port,
-        username: values.username,
-      });
+      const databaseUrl = buildControlDatabaseConnectionUrl(
+        {
+          databaseName: values.database_name,
+          host: values.host,
+          password: values.password || "",
+          port: values.port,
+          username: values.username,
+        },
+        values.database_type,
+      );
       const created = await dataIngestionService.createDataSpace({
         name: values.name.trim(),
         slug: createDataSpaceSlug(values.name, values.database_name),
@@ -1390,15 +1447,22 @@ export function DataIngestionWorkbenchScene({
       private_key: "",
       query_mode: "table",
       sync_mode: "full",
-      table_name: typeof config.table_name === "string" ? config.table_name : "",
-      table_names: Array.isArray(config.table_names)
-        ? config.table_names
-            .filter((value): value is string => typeof value === "string")
-            .map((value) => value.trim())
-            .filter(Boolean)
-        : typeof config.table_name === "string" && config.table_name
-          ? [config.table_name]
-          : [],
+      table_name:
+        typeof config.table_name === "string"
+          ? config.table_name
+          : Array.isArray(config.table_names)
+            ? config.table_names.find((value): value is string => typeof value === "string") || ""
+            : "",
+      table_names: [
+        typeof config.table_name === "string"
+          ? config.table_name
+          : Array.isArray(config.table_names)
+            ? config.table_names.find((value): value is string => typeof value === "string") || ""
+            : "",
+      ].filter(Boolean),
+      primary_keys: Array.isArray(config.primary_keys)
+        ? config.primary_keys.filter((value): value is string => typeof value === "string")
+        : [],
       schema_name: typeof config.schema_name === "string" ? config.schema_name : "",
       initial_cursor: "",
       record_path: typeof config.record_path === "string" ? config.record_path : "",
@@ -1437,7 +1501,7 @@ export function DataIngestionWorkbenchScene({
         name: "",
         description: "",
         data_type: "tabular",
-        storage_mode: "auto",
+        storage_mode: "dedicated",
         upsert_keys: "",
       });
       setSelectedDatasetId(dataset.id);
@@ -1569,6 +1633,7 @@ export function DataIngestionWorkbenchScene({
     }
     setIngesting(true);
     let succeeded = 0;
+    let duplicated = 0;
     let failed = 0;
     try {
       for (const item of uploadItems) {
@@ -1580,6 +1645,7 @@ export function DataIngestionWorkbenchScene({
             sourceId: selectedSourceId || undefined,
             templateCode: selectedTemplateCode,
           });
+          const duplicateFile = queuedRun.duplicate === true;
           updateUploadItem(item.id, {
             run: queuedRun,
             status: queuedRun.status as UploadQueueStatus,
@@ -1587,12 +1653,19 @@ export function DataIngestionWorkbenchScene({
           const completedRun = await waitForRunCompletion(queuedRun.id);
           updateUploadItem(item.id, {
             run: completedRun,
-            status: completedRun.status === "success" ? "success" : "failed",
+            status:
+              completedRun.status === "success"
+                ? duplicateFile
+                  ? "duplicate"
+                  : "success"
+                : "failed",
           });
-          if (completedRun.status === "success") {
-            succeeded += 1;
-          } else {
+          if (completedRun.status !== "success") {
             failed += 1;
+          } else if (duplicateFile) {
+            duplicated += 1;
+          } else {
+            succeeded += 1;
           }
         } catch (error) {
           failed += 1;
@@ -1607,8 +1680,21 @@ export function DataIngestionWorkbenchScene({
           // Ingestion already succeeded; publication can be retried from the dataset drawer.
         });
       }
+      if (duplicated > 0) {
+        message.info(
+          t("dataIngestion.import.batchDuplicates", {
+            count: duplicated,
+          }),
+        );
+      }
       if (failed === 0) {
-        message.success(t("dataIngestion.import.batchSucceeded", { count: succeeded }));
+        if (succeeded > 0) {
+          message.success(
+            t("dataIngestion.import.batchSucceeded", {
+              count: succeeded,
+            }),
+          );
+        }
       } else {
         message.warning(
           t("dataIngestion.import.batchPartial", {
@@ -1640,10 +1726,29 @@ export function DataIngestionWorkbenchScene({
     setSourceIngestionRun(null);
     setSourceIngestionError("");
     try {
+      const databaseSource = ["mysql", "postgres", "postgresql"].includes(
+        selectedIngestionSource.source_type,
+      );
+      if (databaseSource) {
+        const primaryKeys = Array.isArray(selectedIngestionSource.config.primary_keys)
+          ? selectedIngestionSource.config.primary_keys.filter(
+              (value): value is string => typeof value === "string" && value.trim().length > 0,
+            )
+          : [];
+        const targetDataset = datasets.find((item) => item.id === selectedDatasetId);
+        if (primaryKeys.length && !targetDataset?.upsert_keys?.length) {
+          await dataIngestionService.updateDataset(selectedDatasetId, {
+            upsert_keys: primaryKeys,
+          });
+        }
+      }
       const result = await dataIngestionService.runSourceIngestion({
         datasetId: selectedDatasetId,
         name: t("dataIngestion.import.sourceRunName", {
-          source: selectedIngestionSource.name,
+          source:
+            databaseSource && typeof selectedIngestionSource.config.table_name === "string"
+              ? `${selectedIngestionSource.name} / ${selectedIngestionSource.config.table_name}`
+              : selectedIngestionSource.name,
         }),
         path:
           typeof selectedIngestionSource.config.path === "string"
@@ -1651,7 +1756,7 @@ export function DataIngestionWorkbenchScene({
             : "",
         scanType: scanTypeForSource(selectedIngestionSource),
         sourceId: selectedIngestionSource.id,
-        templateCode: selectedTemplateCode,
+        templateCode: databaseSource ? "tabular_standard" : selectedTemplateCode,
       });
       setSourceIngestionRun(result.run);
       if (result.job.last_error) {
@@ -1662,6 +1767,8 @@ export function DataIngestionWorkbenchScene({
           }),
           8,
         );
+      } else if (result.unchanged) {
+        message.info(t("dataIngestion.import.sourceUnchanged"));
       } else if (!result.run) {
         message.warning(t("dataIngestion.import.noSourceData"));
       } else if (result.run.status === "success") {
@@ -1813,7 +1920,7 @@ export function DataIngestionWorkbenchScene({
       name: dataset.name,
       description: dataset.description,
       data_type: dataset.data_type,
-      storage_mode: dataset.storage_mode ?? "auto",
+      storage_mode: dataset.storage_mode ?? "dedicated",
       upsert_keys: (dataset.upsert_keys ?? []).join(", "),
     });
     setDatasetModalOpen(true);
@@ -1825,7 +1932,7 @@ export function DataIngestionWorkbenchScene({
       name: "",
       description: "",
       data_type: "tabular",
-      storage_mode: "auto",
+      storage_mode: "dedicated",
       upsert_keys: "",
     });
     setDatasetModalOpen(true);
@@ -2733,6 +2840,15 @@ export function DataIngestionWorkbenchScene({
               <Col md={importMode === "source" ? 8 : 12} xs={24}>
                 <Form.Item label={t("dataIngestion.import.template")}>
                   <Select
+                    disabled={
+                      importMode === "source" &&
+                      Boolean(
+                        selectedIngestionSource &&
+                        ["mysql", "postgres", "postgresql"].includes(
+                          selectedIngestionSource.source_type,
+                        ),
+                      )
+                    }
                     onChange={setSelectedTemplateCode}
                     options={templates.map((item) => ({
                       label: item.name,
@@ -2757,9 +2873,16 @@ export function DataIngestionWorkbenchScene({
               >
                 <Select
                   onChange={(sourceId) => {
+                    const source = ingestionSources.find((item) => item.id === sourceId);
                     setSourceIngestionError("");
                     setSourceIngestionRun(null);
                     setSourceIngestionSourceId(sourceId);
+                    if (
+                      source &&
+                      ["mysql", "postgres", "postgresql"].includes(source.source_type)
+                    ) {
+                      setSelectedTemplateCode("tabular_standard");
+                    }
                   }}
                   optionFilterProp="label"
                   options={ingestionSources.map((item) => ({
@@ -2997,6 +3120,11 @@ export function DataIngestionWorkbenchScene({
               <Descriptions.Item label={t("dataIngestion.sources.status")}>
                 {t(`dataIngestion.status.${selectedIngestionSource.status}`)}
               </Descriptions.Item>
+              {typeof selectedIngestionSource.config.table_name === "string" ? (
+                <Descriptions.Item label={t("dataIngestion.sources.tableName")}>
+                  <Text code>{selectedIngestionSource.config.table_name}</Text>
+                </Descriptions.Item>
+              ) : null}
             </Descriptions>
           </Card>
         ) : null}
@@ -3444,7 +3572,7 @@ export function DataIngestionWorkbenchScene({
     sourceForm.source_type,
   );
   const sourceNeedsDirectory = ["local_dir", "ftp", "sftp"].includes(sourceForm.source_type);
-  const sourceIsDatabase = ["mysql", "postgres"].includes(sourceForm.source_type);
+  const sourceIsDatabase = ["mysql", "postgres", "postgresql"].includes(sourceForm.source_type);
   const sourceIsApi = sourceForm.source_type === "api";
   const scanUsesFiles = ["local", "ftp", "sftp"].includes(scanForm.scan_type);
   const selectedScanSource = sources.find((source) => source.id === scanForm.source_id);
@@ -3932,7 +4060,7 @@ export function DataIngestionWorkbenchScene({
         />
         <Form
           form={spaceForm}
-          initialValues={{ port: DEFAULT_MYSQL_PORT }}
+          initialValues={{ database_type: "mysql", port: DEFAULT_MYSQL_PORT }}
           layout="vertical"
           onFinish={(values) => void saveDataSpace(values)}
           requiredMark="optional"
@@ -3956,7 +4084,44 @@ export function DataIngestionWorkbenchScene({
             <Input autoComplete="off" placeholder={t("dataIngestion.spaces.namePlaceholder")} />
           </Form.Item>
 
-          <DatabaseConnectionPicker form={spaceForm} />
+          <Form.Item
+            extra={t("dataIngestion.spaces.databaseTypeHint")}
+            label={t("dataIngestion.spaces.databaseType")}
+            name="database_type"
+            rules={[
+              {
+                required: true,
+                message: t("dataIngestion.spaces.databaseTypeRequired"),
+              },
+            ]}
+          >
+            <Select
+              onChange={(value: ControlDatabaseEngine) => {
+                spaceForm.setFieldValue("port", defaultControlDatabasePort(value));
+              }}
+              options={[
+                {
+                  label: t("dataIngestion.spaces.databaseTypes.mysql"),
+                  value: "mysql",
+                },
+                {
+                  label: t("dataIngestion.spaces.databaseTypes.postgresql"),
+                  value: "postgresql",
+                },
+              ]}
+            />
+          </Form.Item>
+
+          <DatabaseConnectionPicker
+            form={spaceForm}
+            onConnectorTypeChange={(connectorType) => {
+              const databaseType = controlDatabaseEngineForConnectorType(connectorType);
+              spaceForm.setFieldsValue({
+                database_type: databaseType,
+                port: defaultControlDatabasePort(databaseType),
+              });
+            }}
+          />
 
           <Row gutter={16}>
             <Col sm={17} xs={24}>
@@ -3984,7 +4149,11 @@ export function DataIngestionWorkbenchScene({
             </Col>
             <Col sm={7} xs={24}>
               <Form.Item
-                extra={t("dataIngestion.spaces.portHint")}
+                extra={t(
+                  spaceDatabaseType === "postgresql"
+                    ? "dataIngestion.spaces.postgresqlPortHint"
+                    : "dataIngestion.spaces.mysqlPortHint",
+                )}
                 label={t("dataIngestion.spaces.port")}
                 name="port"
                 rules={[
@@ -4017,7 +4186,7 @@ export function DataIngestionWorkbenchScene({
                     message: t("dataIngestion.spaces.databaseNameRequired"),
                   },
                   {
-                    pattern: MYSQL_DATABASE_NAME_PATTERN,
+                    pattern: DATABASE_NAME_PATTERN,
                     message: t("dataIngestion.spaces.databaseNameInvalid"),
                   },
                 ]}
@@ -4481,14 +4650,17 @@ export function DataIngestionWorkbenchScene({
                 <Space.Compact block>
                   <Select
                     loading={sourceCatalogLoading}
-                    mode="multiple"
-                    onChange={(tableNames: string[]) =>
+                    onChange={(tableName: string | undefined) => {
                       setSourceForm((current) => ({
                         ...current,
-                        table_name: tableNames[0] ?? "",
-                        table_names: tableNames,
-                      }))
-                    }
+                        table_name: tableName ?? "",
+                        table_names: tableName ? [tableName] : [],
+                        primary_keys: [],
+                      }));
+                      if (tableName) {
+                        void loadDatabaseCatalog(tableName);
+                      }
+                    }}
                     options={
                       databaseTableOptions.length || !sourceForm.table_name
                         ? databaseTableOptions
@@ -4500,7 +4672,7 @@ export function DataIngestionWorkbenchScene({
                     placeholder={t("dataIngestion.sources.tableNamePlaceholder")}
                     showSearch
                     style={{ width: "100%" }}
-                    value={sourceForm.table_names}
+                    value={sourceForm.table_name || undefined}
                   />
                   <Button
                     icon={<ReloadOutlined />}
@@ -4514,7 +4686,7 @@ export function DataIngestionWorkbenchScene({
               {sourceCatalog ? (
                 <Alert
                   description={t("dataIngestion.sources.autoQueryFull", {
-                    count: sourceForm.table_names.length,
+                    count: sourceForm.table_name ? 1 : 0,
                   })}
                   message={t("dataIngestion.sources.autoQueryReady")}
                   showIcon
@@ -4579,25 +4751,12 @@ export function DataIngestionWorkbenchScene({
               value={datasetForm.data_type}
             />
           </Form.Item>
-          <Form.Item
-            extra={t("dataIngestion.catalog.storageModeHint")}
-            label={t("dataIngestion.catalog.storageMode")}
-          >
-            <Select
-              onChange={(storage_mode) =>
-                setDatasetForm((current) => ({
-                  ...current,
-                  storage_mode,
-                }))
-              }
-              options={["auto", "shared", "dedicated"].map((value) => ({
-                value,
-                label: t(`dataIngestion.catalog.storageModes.${value}`),
-              }))}
-              disabled={Boolean(editingDatasetId)}
-              value={datasetForm.storage_mode}
-            />
-          </Form.Item>
+          <Alert
+            message={t("dataIngestion.catalog.oneDatasetOneTable")}
+            showIcon
+            style={{ marginBottom: 16 }}
+            type="info"
+          />
           <Form.Item
             extra={t("dataIngestion.catalog.upsertKeysHint")}
             label={t("dataIngestion.catalog.upsertKeys")}
