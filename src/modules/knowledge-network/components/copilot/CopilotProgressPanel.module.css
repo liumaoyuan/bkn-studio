@@ -1,0 +1,190 @@
+.card {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border: 1px solid #dbe4f0;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f8fbff 0%, #f3f7fd 100%);
+}
+
+.card[data-state="running"] {
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.06);
+}
+
+.card[data-state="failed"] {
+  border-color: #fca5a5;
+  background: #fff7f7;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.statusIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  color: #16a34a;
+}
+
+.card[data-state="running"] .statusIcon {
+  color: #2563eb;
+}
+
+.card[data-state="failed"] .statusIcon {
+  color: #dc2626;
+}
+
+.headings {
+  flex: 1;
+  min-width: 0;
+}
+
+.headline {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f2937;
+  line-height: 20px;
+}
+
+.meta {
+  font-size: 12px;
+  color: #64748b;
+  line-height: 18px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bar {
+  width: 140px;
+  margin: 0 4px;
+}
+
+.summaryRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.summaryChip {
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #e8f0fe;
+  color: #1d4ed8;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.steps {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0 0 0 4px;
+}
+
+.step {
+  position: relative;
+  display: flex;
+  gap: 10px;
+  padding: 4px 0 4px 0;
+}
+
+.step:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 9px;
+  top: 22px;
+  bottom: -2px;
+  width: 1px;
+  background: #dbe4f0;
+}
+
+.dot {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+}
+
+.step[data-status="done"] .dot {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.step[data-status="running"] .dot {
+  background: #dbeafe;
+  color: #1d4ed8;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.step[data-status="failed"] .dot {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.stepBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.stepLine {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.stepLabel {
+  font-size: 13px;
+  color: #334155;
+  line-height: 20px;
+}
+
+.step[data-status="running"] .stepLabel {
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+.stepMs {
+  margin-left: auto;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.stepDetail {
+  font-size: 12px;
+  color: #64748b;
+  line-height: 18px;
+}
+
+.stepError {
+  font-size: 12px;
+  color: #b91c1c;
+  line-height: 18px;
+}
+
+.error {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #b91c1c;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}

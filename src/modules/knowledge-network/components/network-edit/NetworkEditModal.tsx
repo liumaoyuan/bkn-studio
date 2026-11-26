@@ -7,8 +7,9 @@ import {
   type NetworkEditPlan,
   type NetworkEditStep,
 } from "@/modules/knowledge-network/services/network-edit.service";
-import { Alert, Input, Modal, Space, Tag } from "antd";
-import { useState } from "react";
+import { LoadingOutlined } from "@ant-design/icons";
+import { Alert, Input, Modal, Progress, Space, Tag } from "antd";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import styles from "./NetworkEditModal.module.css";
@@ -24,17 +25,35 @@ export function NetworkEditModal({ networkId, onApplied, onClose, open }: Networ
   const { t } = useTranslation();
   const [message, setMessage] = useState("");
   const [plan, setPlan] = useState<NetworkEditPlan | null>(null);
+  const [planModel, setPlanModel] = useState("");
   const [applied, setApplied] = useState<NetworkEditAppliedItem[]>([]);
   const [snapshotId, setSnapshotId] = useState("");
   const [loading, setLoading] = useState(false);
   const [applying, setApplying] = useState(false);
   const [steps, setSteps] = useState<NetworkEditStep[]>([]);
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const startedAtRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!loading && !applying) {
+      return;
+    }
+    startedAtRef.current = Date.now();
+    setElapsedMs(0);
+    const timer = window.setInterval(() => {
+      if (startedAtRef.current) {
+        setElapsedMs(Date.now() - startedAtRef.current);
+      }
+    }, 200);
+    return () => window.clearInterval(timer);
+  }, [loading, applying]);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
   const reset = () => {
     setMessage("");
     setPlan(null);
+    setPlanModel("");
     setApplied([]);
     setSnapshotId("");
     setError("");
@@ -62,8 +81,9 @@ export function NetworkEditModal({ networkId, onApplied, onClose, open }: Networ
     };
     try {
       const result = await planNetworkChangeStream(networkId, message.trim(), mergeStep);
-      setPlan(result);
-      if (result.ops.length === 0) {
+      setPlan(result.plan);
+      setPlanModel(result.model ?? "");
+      if (result.plan.ops.length === 0) {
         setNotice(t("knowledgeNetwork.networkEditNoOps"));
       }
     } catch (cause) {
@@ -169,9 +189,42 @@ export function NetworkEditModal({ networkId, onApplied, onClose, open }: Networ
           ) : null}
         </Space>
 
+        {loading || applying ? (
+          <div className={styles.progressCard}>
+            <div className={styles.progressHeader}>
+              <LoadingOutlined spin />
+              <span>
+                {loading
+                  ? t("knowledgeNetwork.networkEditPlanning")
+                  : t("knowledgeNetwork.networkEditApplying")}
+              </span>
+              <span className={styles.progressElapsed}>{(elapsedMs / 1000).toFixed(1)}s</span>
+            </div>
+            <Progress
+              percent={
+                applying && steps.length > 0
+                  ? Math.round(
+                      (steps.filter((item) => item.status === "done").length /
+                        Math.max(steps[0]?.total ?? steps.length, 1)) *
+                        100,
+                    )
+                  : undefined
+              }
+              showInfo={false}
+              size="small"
+              status="active"
+              strokeColor="#1677ff"
+            />
+          </div>
+        ) : null}
         {error ? <Alert message={error} showIcon type="error" /> : null}
         {notice ? <Alert message={notice} showIcon type="success" /> : null}
 
+        {planModel && !steps.some((step) => step.status === "running") ? (
+          <p className={styles.modelHint}>
+            {t("knowledgeNetwork.networkEditModelHint", { model: planModel })}
+          </p>
+        ) : null}
         {steps.length > 0 ? (
           <ol className={styles.steps}>
             {steps.map((step) => (

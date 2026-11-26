@@ -211,4 +211,14 @@ export const copilotPart = {
   copilotIndexDone:
     "Index build finished: {{completed}} completed, {{failed}} failed; {{fulltext}} fulltext fields, {{vector}} vector fields{{warning}}",
   copilotIndexFailed: "Failed to build indexes: {{error}}",
+  copilotProgressRunning: "Building ontology",
+  copilotProgressDone: "Build finished",
+  copilotProgressFailed: "Build failed",
+  copilotProgressWaiting: "Preparing",
+  copilotProgressSteps: "{{count}} steps",
+  copilotProgressExpand: "Expand build process",
+  copilotProgressCollapse: "Collapse build process",
+  copilotProgressCancel: "Cancel build",
+  copilotProgressNext: "Next step",
+  copilotAnalyzeCancelled: "Build cancelled",
 } as const;

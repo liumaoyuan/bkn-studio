@@ -47,6 +47,12 @@ export type NetworkEditPlan = {
   warnings: string[];
 };
 
+export type NetworkEditPlanResponse = {
+  plan: NetworkEditPlan;
+  /** 实际使用的平台模型名，便于界面提示 */
+  model?: string;
+};
+
 export type NetworkEditAppliedItem = {
   op: NetworkEditOp;
   ok: boolean;
@@ -98,13 +104,13 @@ export async function getNetworkSchema(networkId: string): Promise<string> {
 export async function planNetworkChange(
   networkId: string,
   message: string,
-): Promise<NetworkEditPlan> {
-  const payload = await requestJson<{ plan?: NetworkEditPlan }>(
+): Promise<NetworkEditPlanResponse> {
+  const payload = await requestJson<{ plan?: NetworkEditPlan; model?: string }>(
     `/api/copilot/network/${encodeURIComponent(networkId)}/plan`,
     { method: "POST", body: JSON.stringify({ message }) },
   );
   if (!payload.plan) throw new Error("服务没有返回变更计划");
-  return payload.plan;
+  return { plan: payload.plan, model: payload.model };
 }
 
 export async function applyNetworkChange(
@@ -204,7 +210,7 @@ export async function planNetworkChangeStream(
   networkId: string,
   message: string,
   onStep?: (step: NetworkEditStep) => void,
-): Promise<NetworkEditPlan> {
+): Promise<NetworkEditPlanResponse> {
   const response = await fetch(
     `/api/copilot/network/${encodeURIComponent(networkId)}/plan/stream`,
     {
@@ -216,7 +222,7 @@ export async function planNetworkChangeStream(
   const payload = await readStepStream(response, onStep);
   const plan = payload?.plan as NetworkEditPlan | undefined;
   if (!plan) throw new Error("服务没有返回变更计划");
-  return plan;
+  return { plan, model: typeof payload?.model === "string" ? payload.model : undefined };
 }
 
 export async function applyNetworkChangeStream(

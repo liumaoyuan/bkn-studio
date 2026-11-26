@@ -44,6 +44,7 @@ import type {
   CopilotIr,
   CopilotIrRelation,
 } from "@/modules/knowledge-network/services/ontology-copilot.service";
+import { CopilotProgressPanel, type CopilotProgressSummary } from "./CopilotProgressPanel";
 import {
   analyzeCopilot,
   analyzeCopilotStream,
@@ -131,6 +132,22 @@ const COPILOT_DRAFT_STORAGE_KEY = "bkn-studio:copilot-draft:v1";
 /** 最近一次构建过程的步骤（恢复草案时一并展示）。 */
 const COPILOT_STEPS_STORAGE_KEY = "bkn-studio:copilot-steps:v1";
 
+function summarizeIr(ir: CopilotIr): CopilotProgressSummary {
+  return {
+    objects: ir.objectTypes.length,
+    attributes: ir.objectTypes.reduce((sum, item) => sum + item.properties.length, 0),
+    relations: ir.relations.length,
+    actions: ir.actionTypes?.length ?? 0,
+    risks: ir.riskTypes?.length ?? 0,
+  };
+}
+
+type StoredCopilotSteps = {
+  steps: CopilotAnalyzeStep[];
+  summary: CopilotProgressSummary | null;
+  savedAt: string;
+};
+
 type StoredCopilotDraft = {
   draft: CopilotIr;
   draftMode: "llm" | "heuristic";
@@ -211,6 +228,10 @@ export function OntologyCopilotDrawer({ open, onClose, onImported }: OntologyCop
   const [fallbackNotice, setFallbackNotice] = useState<{ reason: string } | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzeSteps, setAnalyzeSteps] = useState<CopilotAnalyzeStep[]>([]);
+  const [analyzeSummary, setAnalyzeSummary] = useState<CopilotProgressSummary | null>(null);
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+  const [stepsPersisted, setStepsPersisted] = useState(false);
+  const analyzeAbortRef = useRef<AbortController | null>(null);
   const [draftError, setDraftError] = useState<string | null>(null);
   const [draftQuery, setDraftQuery] = useState("");
   const [objectScope, setObjectScope] = useState<ObjectScope>("all");
@@ -239,6 +260,34 @@ export function OntologyCopilotDrawer({ open, onClose, onImported }: OntologyCop
   const [indexBusy, setIndexBusy] = useState(false);
   const [indexNotice, setIndexNotice] = useState<string | null>(null);
   const [embeddingModelId, setEmbeddingModelId] = useState("");
+  const previousDraftIdsRef = useRef<{ objects: string[]; relations: string[] }>({
+    objects: [],
+    relations: [],
+  });
+
+  /** 草案变化时同步选择集：移除已删除项，新增项默认选中（保留用户手动取消）。 */
+  useEffect(() => {
+    if (!draft) {
+      previousDraftIdsRef.current = { objects: [], relations: [] };
+      setSelectedObjects((current) => (current.length === 0 ? current : []));
+      setSelectedRelations((current) => (current.length === 0 ? current : []));
+      return;
+    }
+    const objectIds = draft.objectTypes.map((item) => item.id);
+    const relationIds = draft.relations.map((item) => item.id);
+    const previous = previousDraftIdsRef.current;
+    const addedObjects = objectIds.filter((id) => !previous.objects.includes(id));
+    const addedRelations = relationIds.filter((id) => !previous.relations.includes(id));
+    previousDraftIdsRef.current = { objects: objectIds, relations: relationIds };
+    setSelectedObjects((current) => {
+      const kept = current.filter((id) => objectIds.includes(id));
+      return [...kept, ...addedObjects.filter((id) => !kept.includes(id))];
+    });
+    setSelectedRelations((current) => {
+      const kept = current.filter((id) => relationIds.includes(id));
+      return [...kept, ...addedRelations.filter((id) => !kept.includes(id))];
+    });
+  }, [draft]);
   const [introspectForm, setIntrospectForm] = useState<CopilotIntrospectTarget>({
     dialect: "mysql",
     host: "127.0.0.1",
@@ -352,15 +401,38 @@ export function OntologyCopilotDrawer({ open, onClose, onImported }: OntologyCop
       setBaseNetwork(saved.baseNetwork ?? null);
       const rawSteps = window.localStorage.getItem(COPILOT_STEPS_STORAGE_KEY);
       if (rawSteps) {
-        const savedSteps = JSON.parse(rawSteps) as CopilotAnalyzeStep[];
+        const parsed = JSON.parse(rawSteps) as StoredCopilotSteps | CopilotAnalyzeStep[];
+        const savedSteps = Array.isArray(parsed) ? parsed : parsed.steps;
         if (Array.isArray(savedSteps)) {
           setAnalyzeSteps(savedSteps.slice(-12));
         }
+        const savedSummary = Array.isArray(parsed) ? null : parsed.summary;
+        if (savedSummary) {
+          setAnalyzeSummary(savedSummary);
+        }
+        setStepsPersisted(true);
       }
     } catch {
       // 损坏的本地缓存直接忽略，不阻塞使用。
     }
   }, [open]);
+
+  /** 构建步骤与汇总变化时写入本地缓存，重新打开抽屉仍能看到上次过程。 */
+  useEffect(() => {
+    if (!open || analyzeSteps.length === 0) {
+      return;
+    }
+    try {
+      const payload: StoredCopilotSteps = {
+        steps: analyzeSteps,
+        summary: analyzeSummary,
+        savedAt: new Date().toISOString(),
+      };
+      window.localStorage.setItem(COPILOT_STEPS_STORAGE_KEY, JSON.stringify(payload));
+    } catch {
+      // 忽略存储失败
+    }
+  }, [analyzeSteps, analyzeSummary, open]);
 
   /** 草案变化时自动保存（非空才存，清空会删除）。 */
   useEffect(() => {
@@ -562,8 +634,8 @@ export function OntologyCopilotDrawer({ open, onClose, onImported }: OntologyCop
       setDraftQuery("");
       setObjectScope("all");
       setEndpointFilter("all");
-      setSelectedObjects([]);
-      setSelectedRelations([]);
+      setSelectedObjects(result.ir.objectTypes.map((item) => item.id));
+      setSelectedRelations(result.ir.relations.map((item) => item.id));
       setIndexPlan(null);
       setIndexNotice(null);
     },
@@ -586,6 +658,38 @@ export function OntologyCopilotDrawer({ open, onClose, onImported }: OntologyCop
       setIndexPlan(null);
     }
   }, []);
+
+  /** 按勾选过滤 IR：对象仅保留选中；关系要求两端都选中；行动跟随绑定对象；风险全保留；概念分组裁剪。 */
+  const buildSelectedDraft = useCallback(
+    (ir: CopilotIr): CopilotIr => {
+      const objectIds = new Set(selectedObjects);
+      const relationIds = new Set(selectedRelations);
+      const relations = ir.relations.filter(
+        (relation) =>
+          relationIds.has(relation.id) &&
+          objectIds.has(relation.source) &&
+          objectIds.has(relation.target),
+      );
+      const actionTypes = (ir.actionTypes ?? []).filter((action) =>
+        objectIds.has(action.boundObject),
+      );
+      const conceptGroups = (ir.conceptGroups ?? [])
+        .map((group) => ({
+          ...group,
+          objectTypes: group.objectTypes.filter((id) => objectIds.has(id)),
+        }))
+        .filter((group) => group.objectTypes.length > 0);
+      return {
+        ...ir,
+        objectTypes: ir.objectTypes.filter((item) => objectIds.has(item.id)),
+        relations,
+        actionTypes,
+        riskTypes: ir.riskTypes ?? [],
+        conceptGroups,
+      };
+    },
+    [selectedObjects, selectedRelations],
+  );
 
   /** 一键建索引：更新资源索引配置并触发平台索引构建任务。 */
   const handleBuildIndex = useCallback(async () => {
@@ -851,17 +955,14 @@ export function OntologyCopilotDrawer({ open, onClose, onImported }: OntologyCop
 
     setAnalyzing(true);
     setDraftError(null);
+    setAnalyzeError(null);
     setAnalyzeSteps([]);
+    setAnalyzeSummary(null);
+    setStepsPersisted(false);
+    const controller = new AbortController();
+    analyzeAbortRef.current = controller;
     const mergeStep = (step: CopilotAnalyzeStep) => {
-      setAnalyzeSteps((prev) => {
-        const next = [...prev.filter((item) => item.id !== step.id), step];
-        try {
-          window.localStorage.setItem(COPILOT_STEPS_STORAGE_KEY, JSON.stringify(next));
-        } catch {
-          // 忽略存储失败
-        }
-        return next;
-      });
+      setAnalyzeSteps((prev) => [...prev.filter((item) => item.id !== step.id), step]);
     };
     try {
       const result = await analyzeCopilotStream({
@@ -870,18 +971,32 @@ export function OntologyCopilotDrawer({ open, onClose, onImported }: OntologyCop
         dataFiles: files.filter((item) => item.kind === "data").map((item) => item.file),
         networkName: "",
         onStep: mergeStep,
+        signal: controller.signal,
       });
       if (!result.ok) {
-        setDraftError(result.errors.join("；") || t("knowledgeNetwork.copilotAnalyzeFailed"));
+        const message = result.errors.join("；") || t("knowledgeNetwork.copilotAnalyzeFailed");
+        setAnalyzeError(message);
+        setDraftError(message);
         return;
       }
+      setAnalyzeSummary(summarizeIr(result.ir));
       applyAnalyzeResult(result);
-    } catch {
+    } catch (caught) {
+      if (caught instanceof DOMException && caught.name === "AbortError") {
+        setAnalyzeError(t("knowledgeNetwork.copilotAnalyzeCancelled"));
+        return;
+      }
+      setAnalyzeError(t("knowledgeNetwork.copilotAnalyzeFailed"));
       setDraftError(t("knowledgeNetwork.copilotAnalyzeFailed"));
     } finally {
+      analyzeAbortRef.current = null;
       setAnalyzing(false);
     }
   }, [analyzing, applyAnalyzeResult, files, input, messages, t]);
+
+  const handleCancelAnalyze = useCallback(() => {
+    analyzeAbortRef.current?.abort();
+  }, []);
 
   /** 清空本轮：对话、草案、选择、上传文件全部回到初始状态。 */
   const handleClearDraft = useCallback(() => {
@@ -909,6 +1024,9 @@ export function OntologyCopilotDrawer({ open, onClose, onImported }: OntologyCop
     setAnalyzeWarnings([]);
     setFallbackNotice(null);
     setAnalyzeSteps([]);
+    setAnalyzeSummary(null);
+    setAnalyzeError(null);
+    setStepsPersisted(false);
     try {
       window.localStorage.removeItem(COPILOT_STEPS_STORAGE_KEY);
     } catch {
@@ -921,22 +1039,22 @@ export function OntologyCopilotDrawer({ open, onClose, onImported }: OntologyCop
       return;
     }
     try {
-      await downloadCopilotPackage(draft);
+      await downloadCopilotPackage(buildSelectedDraft(draft));
     } catch {
       setDraftError(t("knowledgeNetwork.copilotAnalyzeFailed"));
     }
-  }, [draft, t]);
+  }, [buildSelectedDraft, draft, t]);
 
   const handleDownloadBindingKit = useCallback(async () => {
     if (!draft) {
       return;
     }
     try {
-      await downloadCopilotBindingKit(draft);
+      await downloadCopilotBindingKit(buildSelectedDraft(draft));
     } catch {
       setDraftError(t("knowledgeNetwork.copilotAnalyzeFailed"));
     }
-  }, [draft, t]);
+  }, [buildSelectedDraft, draft, t]);
 
   /** 打开「从已有网络开始」选择框，首次打开时拉取网络列表。 */
   const handleOpenBasePicker = useCallback(async () => {
@@ -999,7 +1117,12 @@ export function OntologyCopilotDrawer({ open, onClose, onImported }: OntologyCop
       setImportedName(null);
       setImportedKind(mode === "overwrite" && baseNetwork ? "updated" : "created");
       try {
-        const compiled = await compileCopilotKnPayload(draft);
+        const filteredDraft = buildSelectedDraft(draft);
+        if (filteredDraft.objectTypes.length === 0) {
+          setImportError(t("knowledgeNetwork.copilotImportNothingSelected"));
+          return;
+        }
+        const compiled = await compileCopilotKnPayload(filteredDraft);
         if (!compiled.ok) {
           setImportError(compiled.errors.join("；"));
           return;
@@ -1024,7 +1147,7 @@ export function OntologyCopilotDrawer({ open, onClose, onImported }: OntologyCop
           setImportedName(draft.networkName);
         }
         onImported?.();
-        void prepareIndexPlan(draft);
+        void prepareIndexPlan(filteredDraft);
       } catch (cause) {
         setImportError(
           extractRequestErrorMessage(cause) || t("knowledgeNetwork.copilotImportFailed"),
@@ -1033,7 +1156,7 @@ export function OntologyCopilotDrawer({ open, onClose, onImported }: OntologyCop
         setImporting(false);
       }
     },
-    [baseNetwork, draft, importing, onImported, prepareIndexPlan, t],
+    [baseNetwork, buildSelectedDraft, draft, importing, onImported, prepareIndexPlan, t],
   );
 
   const handleImport = useCallback(() => runImport("overwrite"), [runImport]);
@@ -1314,8 +1437,18 @@ export function OntologyCopilotDrawer({ open, onClose, onImported }: OntologyCop
       width={520}
     >
       <div className={styles.body}>
+        <CopilotProgressPanel
+          error={analyzeError ?? undefined}
+          onCancel={handleCancelAnalyze}
+          persisted={stepsPersisted}
+          running={analyzing}
+          steps={analyzeSteps}
+          summary={analyzeSummary}
+        />
         <div className={styles.scrollArea}>
-          <p className={styles.intro}>{t("knowledgeNetwork.copilotIntro")}</p>
+          {analyzeSteps.length === 0 ? (
+            <p className={styles.intro}>{t("knowledgeNetwork.copilotIntro")}</p>
+          ) : null}
 
           <section className={styles.panel}>
             <header className={styles.panelHeader}>
@@ -2150,27 +2283,6 @@ export function OntologyCopilotDrawer({ open, onClose, onImported }: OntologyCop
           />
           {error ? <span className={styles.error}>{error}</span> : null}
           {draftError ? <span className={styles.error}>{draftError}</span> : null}
-          {analyzeSteps.length > 0 && !analyzing ? (
-            <div className={styles.analyzeStepsTitle}>{t("knowledgeNetwork.copilotStepsLast")}</div>
-          ) : null}
-          {analyzeSteps.length > 0 ? (
-            <ol className={styles.analyzeSteps}>
-              {analyzeSteps.map((step) => (
-                <li className={styles.analyzeStep} data-status={step.status} key={step.id}>
-                  <span className={styles.analyzeStepIcon}>
-                    {step.status === "done" ? "✓" : step.error ? "!" : "⟳"}
-                  </span>
-                  <span className={styles.analyzeStepLabel}>{step.label}</span>
-                  {step.detail ? (
-                    <span className={styles.analyzeStepDetail}>{step.detail}</span>
-                  ) : null}
-                  {step.ms ? (
-                    <span className={styles.analyzeStepMs}>{(step.ms / 1000).toFixed(1)}s</span>
-                  ) : null}
-                </li>
-              ))}
-            </ol>
-          ) : null}
           <div className={styles.actions}>
             <AppButton
               disabled={!input.trim()}
