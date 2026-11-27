@@ -14,6 +14,7 @@ import type { CatalogListQuery, CatalogRecord } from "@/shared/catalog";
 
 const countCatalogResourcesMock = vi.hoisted(() => vi.fn());
 const getCatalogMock = vi.hoisted(() => vi.fn());
+const getIngestionCatalogRecordMock = vi.hoisted(() => vi.fn());
 const listCatalogResourcePageMock = vi.hoisted(() => vi.fn());
 const listCatalogsMock = vi.hoisted(() => vi.fn());
 const listCatalogConnectorTypeStatsMock = vi.hoisted(() => vi.fn());
@@ -95,6 +96,10 @@ vi.mock("@/modules/data-catalog/services/resource.service", () => ({
   listCatalogResourcePage: listCatalogResourcePageMock,
   listCatalogDiscovers: vi.fn().mockResolvedValue([]),
 }));
+vi.mock("@/modules/data-catalog/services/ingestion-catalog.service", () => ({
+  DATA_INGESTION_CATALOG_ID: "data-ingestion",
+  getIngestionCatalogRecord: getIngestionCatalogRecordMock,
+}));
 vi.mock("@/shared/catalog", () => ({
   catalogListAllQuery: () => ({ page: 1, pageSize: 100 }),
   getCatalog: getCatalogMock,
@@ -143,6 +148,7 @@ describe("DataCatalogScene", () => {
     vi.clearAllMocks();
     countCatalogResourcesMock.mockResolvedValue(0);
     getCatalogMock.mockResolvedValue(undefined);
+    getIngestionCatalogRecordMock.mockResolvedValue(null);
     listCatalogResourcePageMock.mockResolvedValue({ items: [], total: 0 });
     listCatalogsMock.mockResolvedValue({ items: [catalog], total: 1 });
     listCatalogConnectorTypeStatsMock.mockResolvedValue([
@@ -166,6 +172,26 @@ describe("DataCatalogScene", () => {
     expect(await screen.findByText("catalogs unavailable")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "重试" })).toBeNull();
     expect(screen.getByText("请稍后刷新页面再试。")).toBeInTheDocument();
+  });
+
+  it("shows the ingestion catalog beside existing Vega catalogs", async () => {
+    getIngestionCatalogRecordMock.mockResolvedValue({
+      ...catalog,
+      builtin: true,
+      connectorType: "mariadb",
+      id: "data-ingestion",
+      name: "数据入库",
+    });
+
+    render(
+      <MemoryRouter initialEntries={["/data-catalog"]}>
+        <DataCatalogScene selection={null} suppressAutoSelect />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("catalog-ids").textContent).toBe("data-ingestion,catalog-1"),
+    );
   });
 
   it("does not reload catalogs when selecting a catalog after the first load", async () => {

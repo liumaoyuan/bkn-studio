@@ -5,8 +5,24 @@
  * Conditions. See LICENSE for the full text.
  */
 
-import { ApiOutlined, EllipsisOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
-import { Alert, Dropdown, Input, Select, Space, Tooltip, type MenuProps } from "antd";
+import {
+  ApiOutlined,
+  DatabaseOutlined,
+  EllipsisOutlined,
+  ReloadOutlined,
+  SearchOutlined,
+} from "@ant-design/icons";
+import {
+  Alert,
+  Dropdown,
+  Input,
+  Select,
+  Space,
+  Tag,
+  Tooltip,
+  Typography,
+  type MenuProps,
+} from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -31,6 +47,10 @@ import {
   setDataConnectRecordEnabled,
   testDataConnectRecord,
 } from "@/modules/data-connect/services/data-connect.service";
+import {
+  listIngestionDatabases,
+  type IngestionDatabaseEntry,
+} from "@/modules/data-connect/services/ingestion-databases.service";
 import type {
   DataConnectConnectorType,
   DataConnectRecord,
@@ -45,6 +65,8 @@ import {
 } from "@/shared/catalog";
 
 import styles from "./DataConnectListScene.module.css";
+
+const { Text } = Typography;
 
 const HEALTH_STATUS_TONES: Record<DataConnectRecord["healthStatus"], LightStatusTone> = {
   degraded: "warning",
@@ -139,6 +161,9 @@ export function DataConnectListScene({
   const [detailRecordId, setDetailRecordId] = useState<string | null>(null);
   const [refreshVersion, setRefreshVersion] = useState(0);
   const [connectorTypesRefreshVersion, setConnectorTypesRefreshVersion] = useState(0);
+  const [ingestionDatabases, setIngestionDatabases] = useState<IngestionDatabaseEntry[]>([]);
+  const [ingestionLoading, setIngestionLoading] = useState(false);
+  const [ingestionError, setIngestionError] = useState<string | null>(null);
   const dataRequestIdRef = useRef(0);
 
   useEffect(() => {
@@ -217,6 +242,45 @@ export function DataConnectListScene({
       dataRequestIdRef.current += 1;
     };
   }, [loadData, refreshVersion]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setIngestionLoading(true);
+    setIngestionError(null);
+    void listIngestionDatabases()
+      .then((items) => {
+        if (!cancelled) {
+          setIngestionDatabases(items);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setIngestionDatabases([]);
+          setIngestionError(extractRequestErrorMessage(error));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIngestionLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshVersion]);
+
+  const filteredIngestionDatabases = useMemo(() => {
+    const keyword = debouncedKeyword.toLowerCase();
+    if (!keyword) {
+      return ingestionDatabases;
+    }
+    return ingestionDatabases.filter(
+      (item) =>
+        item.name.toLowerCase().includes(keyword) ||
+        item.databaseLabel.toLowerCase().includes(keyword),
+    );
+  }, [debouncedKeyword, ingestionDatabases]);
 
   const openDetail = useCallback(
     (record: DataConnectRecord) => {
@@ -505,6 +569,57 @@ export function DataConnectListScene({
     },
   ];
 
+  const ingestionColumns: ColumnsType<IngestionDatabaseEntry> = [
+    {
+      dataIndex: "name",
+      title: t("dataConnect.ingestionDatabases.name"),
+      width: 210,
+      render: (value: string, record) => (
+        <Space direction="vertical" size={2}>
+          <Text>{value}</Text>
+          <Text type="secondary" className={styles.cellEllipsis}>
+            {record.databaseLabel}
+          </Text>
+        </Space>
+      ),
+    },
+    {
+      dataIndex: "roles",
+      title: t("dataConnect.ingestionDatabases.role"),
+      width: 240,
+      render: (roles: IngestionDatabaseEntry["roles"]) => (
+        <Space wrap size={4}>
+          {roles.map((role) => (
+            <Tag color={role === "control" ? "gold" : "blue"} key={role}>
+              {t(`dataConnect.ingestionDatabases.roles.${role}`)}
+            </Tag>
+          ))}
+        </Space>
+      ),
+    },
+    {
+      dataIndex: "status",
+      title: t("common.status"),
+      width: 100,
+      render: (value: string) => (
+        <LightStatusTag tone={value === "ready" ? "success" : "error"}>
+          {value === "ready" ? t("common.enabled") : value}
+        </LightStatusTag>
+      ),
+    },
+    {
+      key: "actions",
+      title: t("common.actions"),
+      align: "right",
+      width: 120,
+      render: () => (
+        <AppButton onClick={() => void navigate("/data-ingestion")} type="link">
+          {t("dataConnect.ingestionDatabases.open")}
+        </AppButton>
+      ),
+    },
+  ];
+
   return (
     <>
       {danger.node}
@@ -605,6 +720,38 @@ export function DataConnectListScene({
             </div>
           </div>
         </div>
+        {ingestionLoading || ingestionError || ingestionDatabases.length > 0 ? (
+          <section className={styles.ingestionSection}>
+            <div className={styles.ingestionHeader}>
+              <Space>
+                <DatabaseOutlined />
+                <div>
+                  <Text strong>{t("dataConnect.ingestionDatabases.title")}</Text>
+                  <div>
+                    <Text type="secondary">{t("dataConnect.ingestionDatabases.description")}</Text>
+                  </div>
+                </div>
+              </Space>
+              <AppButton onClick={() => void navigate("/data-ingestion")} type="link">
+                {t("dataConnect.ingestionDatabases.open")}
+              </AppButton>
+            </div>
+            {ingestionError ? (
+              <Alert message={ingestionError} showIcon type="warning" />
+            ) : (
+              <AppTable<IngestionDatabaseEntry>
+                columns={ingestionColumns}
+                dataSource={filteredIngestionDatabases}
+                loading={ingestionLoading}
+                locale={{ emptyText: t("dataConnect.ingestionDatabases.empty") }}
+                pagination={false}
+                rowKey="id"
+                scroll={{ x: 720 }}
+                size="small"
+              />
+            )}
+          </section>
+        ) : null}
         <TableSurface className={styles.tableSurface}>
           {loadError ? (
             <Alert
@@ -625,9 +772,15 @@ export function DataConnectListScene({
                   {t("common.create")}
                 </AppButton>
               }
-              description={t("dataConnect.emptyDescription")}
+              description={
+                ingestionDatabases.length > 0
+                  ? t("dataConnect.emptyVegaDescription")
+                  : t("dataConnect.emptyDescription")
+              }
               icon={<ApiOutlined />}
-              title={t("dataConnect.empty")}
+              title={
+                ingestionDatabases.length > 0 ? t("dataConnect.emptyVega") : t("dataConnect.empty")
+              }
             />
           ) : (
             <AppTable<DataConnectRecord>

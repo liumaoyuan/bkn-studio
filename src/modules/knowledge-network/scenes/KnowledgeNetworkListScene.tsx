@@ -32,6 +32,7 @@ import { ResourcePermissionRequestAction } from "@/modules/knowledge-network/com
 import { hasKnowledgeNetworkRecordOperation } from "@/modules/knowledge-network/utils/record-operations";
 import { ObjectAuthorizeDrawer } from "@/modules/system-admin/components/ObjectAuthorizeDrawer";
 import { KnowledgeNetworkImportButton } from "@/modules/knowledge-network/components/shared/KnowledgeNetworkImportButton";
+import { OntologyCopilotEntryButton } from "@/modules/knowledge-network/components/copilot/OntologyCopilotEntryButton";
 import {
   buildKnowledgeNetworkListPath,
   knowledgeNetworkListReturnState,
@@ -290,6 +291,14 @@ export function KnowledgeNetworkListScene({ onOpenWorkspace }: KnowledgeNetworkL
             <KnowledgeNetworkImportButton
               className={styles.toolbarButton}
               onImported={reloadData}
+            />
+          </PermissionGate>
+          <PermissionGate permissions="knowledge-network:create">
+            <OntologyCopilotEntryButton
+              className={styles.toolbarButton}
+              onImported={() => {
+                void reloadData();
+              }}
             />
           </PermissionGate>
         </div>

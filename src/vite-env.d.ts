@@ -15,6 +15,7 @@ interface ImportMetaEnv {
   readonly VITE_DEV_ACCESS_TOKEN?: string;
   readonly VITE_DEV_AUTH_ORIGIN?: string;
   readonly VITE_DEV_REFRESH_TOKEN?: string;
+  readonly VITE_DATA_INGESTION_TARGET?: string;
   readonly VITE_SAFE_PROXY_TARGET?: string;
   readonly VITE_INSTALL_STATUS_URL?: string;
   readonly VITE_KNOWLEDGE_NETWORK_IMPORT_MAX_FILE_SIZE_BYTES?: string;

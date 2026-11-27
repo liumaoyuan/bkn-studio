@@ -1,0 +1,159 @@
+.body {
+  display: flex;
+  width: 100%;
+}
+
+.primary {
+  height: 32px;
+  padding: 0 16px;
+  color: #ffffff;
+  font-weight: 500;
+  background: #1554ad;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.primary:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.secondary {
+  height: 32px;
+  padding: 0 16px;
+  color: #1554ad;
+  font-weight: 500;
+  background: #ffffff;
+  border: 1px solid #1554ad;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.secondary:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.section {
+  padding: 12px;
+  background: #f6f8fb;
+  border: 1px solid #e4e9f2;
+  border-radius: 8px;
+}
+
+.sectionTitle {
+  margin-bottom: 6px;
+  color: #1f2d3d;
+  font-weight: 600;
+}
+
+.reply {
+  margin-bottom: 8px;
+  color: #333333;
+  line-height: 1.7;
+}
+
+.ops {
+  margin: 0;
+  padding-left: 20px;
+  line-height: 2;
+}
+
+.warning {
+  margin-top: 10px;
+}
+
+.warnings {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.detail {
+  color: #389e0d;
+}
+
+.error {
+  color: #cf1322;
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(22, 119, 255, 0.05);
+  list-style: none;
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--color-text-secondary, #666);
+}
+
+.stepIcon {
+  width: 16px;
+  text-align: center;
+  color: var(--color-text-quaternary, #999);
+}
+
+.step[data-status="done"] .stepIcon {
+  color: var(--color-success, #52c41a);
+}
+
+.stepLabel {
+  color: var(--color-text, #1f2329);
+}
+
+.stepDetail {
+  margin-left: auto;
+  color: var(--color-text-quaternary, #bfbfbf);
+  font-variant-numeric: tabular-nums;
+}
+
+.progressCard {
+  padding: 10px 12px;
+  border: 1px solid rgba(22, 119, 255, 0.25);
+  border-radius: 10px;
+  background: rgba(22, 119, 255, 0.04);
+}
+
+.progressHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #1677ff;
+}
+
+.progressElapsed {
+  margin-left: auto;
+  color: var(--color-text-tertiary, #8c8c8c);
+  font-variant-numeric: tabular-nums;
+}
+
+.step[data-status="running"] .stepIcon {
+  color: #1677ff;
+  animation: networkEditPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes networkEditPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.modelHint {
+  margin: 0;
+  color: rgba(0, 0, 0, 0.45);
+  font-size: 12px;
+}

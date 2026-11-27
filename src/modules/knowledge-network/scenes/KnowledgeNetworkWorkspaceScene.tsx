@@ -30,7 +30,6 @@ import { CAPABILITIES } from "@/framework/entitlement/capabilities";
 import { CapabilityUpgradeDialog } from "@/framework/entitlement/CapabilityUpgradeDialog";
 import { EditionBadge } from "@/framework/entitlement/EditionBadge";
 import type { Edition } from "@/framework/entitlement/edition";
-import { COMMERCIAL_EDITIONS_ENABLED } from "@/framework/entitlement/product-edition-policy";
 import type { CapabilityState } from "@/framework/entitlement/types";
 import { useCapability } from "@/framework/entitlement/use-entitlement";
 import type {
@@ -159,22 +158,15 @@ export function KnowledgeNetworkWorkspaceScene({
         icon: <ThunderboltOutlined />,
         count: detail?.statistics.actionTypesTotal ?? 0,
       },
-      // Object metrics is a paid page. The community distribution has neither the page nor the
-      // upgrade dialog (product-edition-policy turns the latter off), so an entry here would be a
-      // button that does nothing when clicked.
-      ...(COMMERCIAL_EDITIONS_ENABLED
-        ? [
-            {
-              key: "metrics" as const,
-              label: t("knowledgeNetwork.workspaceMetrics"),
-              icon: <LineChartOutlined />,
-              count: detail?.statistics.metricsTotal ?? 0,
-              paidCapability: CAPABILITIES.OBJECT_METRICS,
-              paidCapabilityState: objectMetricsCapability,
-              paidEdition: "professional" as const,
-            },
-          ]
-        : []),
+      {
+        key: "metrics",
+        label: t("knowledgeNetwork.workspaceMetrics"),
+        icon: <LineChartOutlined />,
+        count: detail?.statistics.metricsTotal ?? 0,
+        paidCapability: CAPABILITIES.OBJECT_METRICS,
+        paidCapabilityState: objectMetricsCapability,
+        paidEdition: "professional",
+      },
       {
         key: "functions",
         label: t("knowledgeNetwork.workspaceFunctions"),

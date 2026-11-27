@@ -14,6 +14,7 @@ import { bknTraceNavigation } from "@/modules/bkn-trace/navigation";
 import { capabilityMinEdition } from "@/modules/subscription/capability-catalog";
 import { dataCatalogNavigation } from "@/modules/data-catalog/navigation";
 import { dataConnectNavigation } from "@/modules/data-connect/navigation";
+import { dataIngestionNavigation } from "@/modules/data-ingestion/navigation";
 import { executionFactoryLabNavigation } from "@/modules/execution-factory-lab/navigation";
 import { executionFactoryNavigation } from "@/modules/execution-factory/navigation";
 import { homeNavigation } from "@/modules/home/navigation";
@@ -24,6 +25,7 @@ const navigationContributions: ConsoleNavContribution[] = [
   homeNavigation,
   knowledgeNetworkNavigation,
   dataConnectNavigation,
+  dataIngestionNavigation,
   dataCatalogNavigation,
   executionFactoryNavigation,
   modelResourcesNavigation,

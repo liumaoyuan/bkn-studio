@@ -14,6 +14,7 @@ import { apiKeysEnUS } from "@/modules/api-keys/locales/en-US";
 import { bknTraceEnUS } from "@/modules/bkn-trace/locales/en-US";
 import { dataCatalogEnUS } from "@/modules/data-catalog/locales/en-US";
 import { dataConnectEnUS } from "@/modules/data-connect/locales/en-US";
+import { dataIngestionEnUS } from "@/modules/data-ingestion/locales/en-US";
 import { executionFactoryLabEnUS } from "@/modules/execution-factory-lab/locales/en-US";
 import { executionFactoryEnUS } from "@/modules/execution-factory/locales/en-US";
 import { homeEnUS } from "@/modules/home/locales/en-US";
@@ -29,6 +30,7 @@ export const enUS = {
   ...shellEnUS,
   ...homeEnUS,
   ...dataConnectEnUS,
+  ...dataIngestionEnUS,
   ...dataCatalogEnUS,
   ...knowledgeNetworkEnUS,
   ...executionFactoryEnUS,

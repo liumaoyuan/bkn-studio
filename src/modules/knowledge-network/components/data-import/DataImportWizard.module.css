@@ -1,0 +1,76 @@
+/**
+ * Copyright (c) 2026 OpenBKN
+ * SPDX-License-Identifier: LicenseRef-OpenBKN
+ * Licensed under the OpenBKN License, a modified Apache 2.0 with Additional
+ * Conditions. See LICENSE for the full text.
+ */
+
+.intro {
+  margin: 0 0 14px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.label {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.datasetMeta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.metaText {
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+}
+
+.statsRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mappingTitle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.alert {
+  margin-top: 8px;
+}
+
+.issueList {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 12px;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.spacer {
+  flex: 1;
+}

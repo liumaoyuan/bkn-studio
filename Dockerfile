@@ -15,9 +15,12 @@ FROM ${NODE_IMAGE} AS build
 
 # npm registry override; keeps the default upstream behavior when not passed.
 ARG NPM_REGISTRY=https://registry.npmjs.org/
+# Heap cap for the SPA bundle. The vite (esbuild/rollup) build of this app needs
+# more than Node's default old-space on small-memory daemons; 4096MiB is safe.
+ARG NODE_MAX_OLD_SPACE=4096
 # Containers have no usable IPv6 route; without this Node may pick the AAAA
 # record first and fail the connection.
-ENV NODE_OPTIONS=--dns-result-order=ipv4first
+ENV NODE_OPTIONS="--dns-result-order=ipv4first --max-old-space-size=${NODE_MAX_OLD_SPACE}"
 
 # Install the pnpm version pinned by package.json#packageManager directly with
 # npm. Corepack's downloader has no timeout/retry controls and fails when the

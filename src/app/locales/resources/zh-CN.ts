@@ -14,6 +14,7 @@ import { apiKeysZhCN } from "@/modules/api-keys/locales/zh-CN";
 import { bknTraceZhCN } from "@/modules/bkn-trace/locales/zh-CN";
 import { dataCatalogZhCN } from "@/modules/data-catalog/locales/zh-CN";
 import { dataConnectZhCN } from "@/modules/data-connect/locales/zh-CN";
+import { dataIngestionZhCN } from "@/modules/data-ingestion/locales/zh-CN";
 import { executionFactoryLabZhCN } from "@/modules/execution-factory-lab/locales/zh-CN";
 import { executionFactoryLabGapFillZh } from "@/modules/execution-factory-lab/utils/gap-fill-i18n-zh";
 import { executionFactoryZhCN } from "@/modules/execution-factory/locales/zh-CN";
@@ -30,6 +31,7 @@ export const zhCN = {
   ...shellZhCN,
   ...homeZhCN,
   ...dataConnectZhCN,
+  ...dataIngestionZhCN,
   ...dataCatalogZhCN,
   ...knowledgeNetworkZhCN,
   ...executionFactoryZhCN,

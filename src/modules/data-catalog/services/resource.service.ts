@@ -21,6 +21,12 @@ import { postCatalogDiscover } from "@/shared/catalog";
 import { resourceCountForPagination } from "@/modules/data-catalog/lib/resource-count";
 import { parseFilterCondition } from "@/modules/data-catalog/lib/filter-tree";
 import {
+  DATA_INGESTION_CATALOG_ID,
+  getIngestionCatalogResources,
+  listIngestionCatalogResources,
+  previewIngestionCatalogResource,
+} from "@/modules/data-catalog/services/ingestion-catalog.service";
+import {
   emitMockChange,
   formatMockTimestamp,
   mockBuildTasks,
@@ -517,6 +523,9 @@ export type CatalogResourcePage = {
 export async function listCatalogResourcePage(
   query: ResourceListQuery = {},
 ): Promise<CatalogResourcePage> {
+  if (query.catalogId === DATA_INGESTION_CATALOG_ID) {
+    return listIngestionCatalogResources(query);
+  }
   const offset = Math.max(0, query.offset ?? 0);
   const limit = query.limit ?? RESOURCE_LIST_PAGE_SIZE;
 
@@ -537,6 +546,22 @@ export async function listCatalogResourcePage(
     });
   }
 
+  // 数据入库的数据集挂在它们所属的数据连接下：列出该连接资源时一并合并进来。
+  const ingestionPage =
+    query.catalogId && query.catalogId !== DATA_INGESTION_CATALOG_ID
+      ? await listIngestionCatalogResources({ ...query, limit: -1, offset: 0 })
+      : { items: [], total: 0 };
+  const mergeIngestionResources = (page: CatalogResourcePage): CatalogResourcePage => {
+    if (ingestionPage.items.length === 0) {
+      return page;
+    }
+    const items = [...page.items, ...ingestionPage.items];
+    return {
+      items: query.sort === "name" ? sortResources(items, query) : items,
+      total: page.total + ingestionPage.total,
+    };
+  };
+
   const response = await http.get<ListResponse<BackendResourceSummary>>(
     "/vega-backend/v1/resources",
     {
@@ -556,10 +581,10 @@ export async function listCatalogResourcePage(
     },
   );
 
-  return {
+  return mergeIngestionResources({
     items: response.data.entries.map(mapResource),
     total: response.data.total_count,
-  };
+  });
 }
 
 export async function countCatalogResources(query: ResourceListQuery = {}): Promise<number> {
@@ -577,14 +602,25 @@ export async function getCatalogResources(ids: string[]) {
     return [];
   }
 
-  if (useMock) {
-    const byId = new Map(mockResources.map((item) => [item.id, item]));
-    return wait(uniqueIds.map((id) => byId.get(id)).filter(Boolean) as CatalogResource[]);
+  const ingestionIds = uniqueIds.filter((id) => id.startsWith("data-ingestion:dataset:"));
+  const vegaIds = uniqueIds.filter((id) => !id.startsWith("data-ingestion:dataset:"));
+  if (vegaIds.length === 0) {
+    return getIngestionCatalogResources(ingestionIds);
   }
 
-  const resources: CatalogResource[] = [];
-  for (let index = 0; index < uniqueIds.length; index += 50) {
-    const chunk = uniqueIds.slice(index, index + 50);
+  const ingestionResources =
+    ingestionIds.length > 0 ? await getIngestionCatalogResources(ingestionIds) : [];
+  if (useMock) {
+    const byId = new Map(mockResources.map((item) => [item.id, item]));
+    return wait([
+      ...ingestionResources,
+      ...(vegaIds.map((id) => byId.get(id)).filter(Boolean) as CatalogResource[]),
+    ]);
+  }
+
+  const resources: CatalogResource[] = [...ingestionResources];
+  for (let index = 0; index < vegaIds.length; index += 50) {
+    const chunk = vegaIds.slice(index, index + 50);
     const response = await http.get<{ entries?: BackendResource[] }>(
       `/vega-backend/v1/resources/${chunk.join(",")}`,
       {
@@ -1074,6 +1110,9 @@ export async function previewCatalogResource(
   id: string,
   query: ResourcePreviewQuery,
 ): Promise<ResourcePreviewResult> {
+  if (id.startsWith("data-ingestion:dataset:")) {
+    return previewIngestionCatalogResource(id, query);
+  }
   if (useMock) {
     const resource = mockResources.find((item) => item.id === id);
     if (!resource) {

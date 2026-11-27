@@ -1,0 +1,755 @@
+/**
+ * Copyright (c) 2026 OpenBKN
+ * SPDX-License-Identifier: LicenseRef-OpenBKN
+ * Licensed under the OpenBKN License, a modified Apache 2.0 with Additional
+ * Conditions. See LICENSE for the full text.
+ */
+
+/* 浮窗沿用 Studio 的设计令牌（--color-*），亮/暗主题自动跟随，
+   不再写死颜色值，避免与系统其余界面割裂。 */
+
+.drawer :global(.ant-drawer-header) {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.drawer :global(.ant-drawer-title) {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.drawer :global(.ant-drawer-body) {
+  padding: 16px;
+  background: var(--color-bg-layout);
+}
+
+/* 抽屉内容分两段：中间滚动区 + 底部固定输入区，输入框永远可见 */
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.scrollArea {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.intro {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+/* 通用区块标题：与系统里的小节标题风格一致 */
+.panel {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 150px;
+}
+
+.panelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.panelLabel {
+  color: var(--color-text-tertiary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.panelHint {
+  color: var(--color-text-tertiary);
+  font-size: 11px;
+}
+
+.messages {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 40vh;
+  min-height: 120px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  padding: 2px;
+}
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: auto;
+  padding: 16px;
+  color: var(--color-text-tertiary);
+  text-align: center;
+}
+
+.emptyIcon {
+  color: var(--color-text-tertiary);
+  font-size: 22px;
+}
+
+.placeholder {
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.bubble {
+  max-width: 88%;
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 13px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.userBubble {
+  align-self: flex-end;
+  background: var(--color-primary-100);
+  color: var(--color-text-primary);
+}
+
+.assistantBubble {
+  align-self: flex-start;
+  background: var(--color-fill-secondary);
+  color: var(--color-text-primary);
+}
+
+.composer {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg-surface);
+  padding: 12px;
+}
+
+.fileRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.hint {
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.error {
+  color: var(--color-error-text);
+  font-size: 12px;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding-top: 10px;
+  border-top: 1px dashed var(--color-divider);
+}
+
+/* 草案卡片：用系统语义色（info），不再用自定义蓝 */
+.draft {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid var(--color-info-border);
+  border-radius: 8px;
+  background: var(--color-info-bg);
+  padding: 12px;
+}
+
+.draftHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.fileList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.fileChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  padding: 2px 4px 2px 8px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  background: var(--color-fill-secondary);
+  border-radius: 12px;
+}
+
+.fileChip :global(.ant-btn) {
+  height: 18px;
+  padding-inline: 2px;
+}
+
+.draftHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.draftTitle {
+  color: var(--color-info-text);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.draftName {
+  color: var(--color-text-primary);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.bindHint {
+  margin-top: 2px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.draftMeta {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.draftTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.draftHint {
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.draftActions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+/* 草案可编辑：对象/关系逐行改名、删除 */
+.draft {
+  flex: 0 0 auto;
+}
+
+.draftSearch {
+  margin: 4px 0 2px;
+}
+
+.draftToolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.draftScope {
+  min-width: 96px;
+  max-width: 132px;
+}
+
+.draftSelected {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  white-space: nowrap;
+}
+
+.draftShowMore {
+  align-self: flex-start;
+  height: 22px;
+  padding-inline: 4px;
+  font-size: 12px;
+}
+
+.draftList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 26vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.draftListHeader {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--color-info-bg);
+  color: var(--color-text-tertiary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.draftRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.draftRowName {
+  flex: 1;
+  min-width: 0;
+}
+
+.draftRowMeta {
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.draftDelete {
+  color: var(--color-text-tertiary);
+}
+
+.draftDelete:hover {
+  color: var(--color-error-text);
+}
+
+.draftEndpoint {
+  flex: 0 1 108px;
+  min-width: 88px;
+}
+
+.draftListHeader :global(.ant-btn) {
+  height: 22px;
+  padding-inline: 4px;
+  font-size: 12px;
+}
+
+.titleRow {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+}
+
+.messageGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.typing {
+  color: var(--color-text-tertiary);
+  font-size: 13px;
+}
+
+.statusRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 4px;
+  color: var(--color-text-tertiary);
+  font-size: 12px;
+}
+
+.appliedList {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
+  font-size: 12px;
+  list-style: none;
+}
+
+.appliedTitle {
+  font-weight: 600;
+}
+
+.appliedItem::before {
+  content: "✓ ";
+}
+
+.draftCollapsed {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--color-bg-surface);
+  border: 1px dashed var(--color-border);
+}
+
+.importOk {
+  padding: 8px 10px;
+  border-radius: var(--border-radius-sm);
+  background: var(--color-success-bg);
+  color: var(--color-success-text);
+  font-size: 12px;
+}
+
+.importError {
+  padding: 8px 10px;
+  border-radius: var(--border-radius-sm);
+  background: var(--color-error-bg);
+  color: var(--color-error-text);
+  font-size: 12px;
+}
+
+.fileKind {
+  margin: 0;
+  padding: 0 6px;
+  border-radius: var(--border-radius-sm);
+  background: var(--color-fill-secondary);
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.bothReady {
+  color: var(--color-success-text);
+  font-size: 12px;
+}
+
+.draftRowInput {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.bindingBox {
+  border: 1px dashed var(--color-border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: var(--color-bg-surface);
+}
+
+.bindingHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.bindingTitle {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.bindingList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 18vh;
+  overflow-y: auto;
+  margin-top: 6px;
+  padding-right: 4px;
+}
+
+.bindingRow {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.bindingRowName {
+  flex: 0 0 auto;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.bindingRowMeta {
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.warnBox {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-warning-border);
+  border-radius: 8px;
+  background: var(--color-warning-bg);
+}
+
+.warnItem {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  color: var(--color-warning-text);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.fallbackBox {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-warning-border);
+  border-radius: 8px;
+  background: var(--color-warning-bg);
+}
+
+.fallbackTitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-warning-text);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.fallbackReason {
+  color: var(--color-warning-text);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.fallbackActions {
+  display: flex;
+  gap: 8px;
+}
+
+.viewToggleGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+}
+
+.viewToggle {
+  color: var(--color-text-secondary);
+}
+
+.viewToggleActive {
+  color: var(--color-primary);
+  background: var(--color-primary-bg, #eef3ff);
+  border-radius: 4px;
+}
+
+.basePickerBody {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.basePickerActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.schemaBox {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg-surface);
+}
+
+.schemaTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.schemaMeta {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.questionBlock {
+  margin-top: 2px;
+}
+
+.questionTitle {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.questionList {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--color-text-primary);
+}
+
+.questionItem + .questionItem {
+  margin-top: 2px;
+}
+
+.introspectBody {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.introspectHint {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.introspectRow {
+  display: flex;
+  gap: 8px;
+}
+
+.introspectRow > * {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.introspectOk {
+  color: var(--color-success-text);
+  font-size: 12px;
+}
+
+.introspectError {
+  color: var(--color-error-text);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.introspectActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.introspectAttachRow {
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.attachNotice {
+  margin-top: 6px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.indexBox {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px dashed var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg-surface);
+}
+
+.indexTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+
+.indexHint {
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--color-warning-text);
+}
+
+.indexNotice {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--color-success-text);
+}
+
+.analyzeSteps {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 4px 0 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(22, 119, 255, 0.05);
+  list-style: none;
+}
+
+.analyzeStep {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--color-text-secondary, #666);
+}
+
+.analyzeStepIcon {
+  width: 16px;
+  text-align: center;
+  color: var(--color-text-quaternary, #999);
+}
+
+.analyzeStep[data-status="done"] .analyzeStepIcon {
+  color: var(--color-success, #52c41a);
+}
+
+.analyzeStepLabel {
+  color: var(--color-text, #1f2329);
+}
+
+.analyzeStepDetail {
+  color: var(--color-text-tertiary, #8c8c8c);
+}
+
+.analyzeStepMs {
+  margin-left: auto;
+  color: var(--color-text-quaternary, #bfbfbf);
+  font-variant-numeric: tabular-nums;
+}
+
+.analyzeStepsTitle {
+  margin: 6px 0 2px;
+  font-size: 12px;
+  color: var(--color-text-tertiary, #8c8c8c);
+}

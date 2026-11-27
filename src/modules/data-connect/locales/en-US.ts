@@ -25,6 +25,23 @@ export const dataConnectEnUS = {
     empty: "No data connections",
     emptyDescription:
       "No data connection records are available yet. Use create to add the first connector instance.",
+    emptyVega: "No Vega data connections",
+    emptyVegaDescription:
+      "Existing data ingestion databases are shown above. The Vega connection catalog is still empty.",
+    ingestionDatabases: {
+      title: "Data ingestion databases",
+      description:
+        "These are the control database and data spaces in use by data ingestion. Manage them from Data Ingestion.",
+      name: "Name",
+      role: "Purpose",
+      empty: "No data ingestion databases match the current search.",
+      open: "Open data ingestion",
+      roles: {
+        control: "Control database",
+        "default-space": "Default data space",
+        space: "Data space",
+      },
+    },
     createOnlyDescription: "You can create a data connection.",
     moreActions: "More actions",
     detailTitle: "Connection Detail",

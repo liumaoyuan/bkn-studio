@@ -59,6 +59,7 @@ export default defineConfig(({ mode }) => {
   // 监听的端口并返 500。要连本地调试实例时显式设 VITE_*_TARGET。
   const labProxyTarget = process.env.VITE_LAB_PROXY_TARGET ?? devProxyOrigin;
   const ossProxyTarget = process.env.VITE_OSS_PROXY_TARGET ?? devProxyOrigin;
+  const dataIngestionProxyTarget = env.VITE_DATA_INGESTION_TARGET?.trim() || devProxyOrigin;
   // Older remote installations still serve object metrics under v2. Keep the
   // production API contract unchanged while allowing local UI integration.
   const objectMetricDevApiVersion = env.VITE_DEV_OBJECT_METRIC_API_VERSION?.trim();
@@ -113,6 +114,14 @@ export default defineConfig(({ mode }) => {
           secure: false,
           target: devProxyOrigin,
         },
+        // 本体构建浮窗的本地 copilot 服务（独立于 mock 开关，须在通用 /api 代理之前）。
+        "/api/copilot": {
+          changeOrigin: true,
+          secure: false,
+          timeout: 180_000,
+          proxyTimeout: 180_000,
+          target: process.env.VITE_COPILOT_TARGET ?? "http://127.0.0.1:8787",
+        },
         // Specific API prefixes must be listed before the generic /api proxy.
         "/api/agent-operator-integration": {
           changeOrigin: true,
@@ -134,6 +143,14 @@ export default defineConfig(({ mode }) => {
           timeout: 120_000,
           proxyTimeout: 120_000,
           target: agentRetrievalTarget,
+        },
+        "/api/data-ingestion": {
+          changeOrigin: true,
+          secure: false,
+          timeout: 300_000,
+          proxyTimeout: 300_000,
+          target: dataIngestionProxyTarget,
+          rewrite: (path) => path.replace(/^\/api\/data-ingestion/, "/api"),
         },
         ...(agentObservabilityProxyTarget
           ? {

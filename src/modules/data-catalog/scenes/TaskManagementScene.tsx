@@ -12,16 +12,17 @@ import { useSearchParams } from "react-router-dom";
 
 import { IndexBuildListScene } from "@/modules/data-catalog/scenes/IndexBuildListScene";
 
+import { IngestionRunTaskPanel } from "../components/IngestionRunTaskPanel";
 import {
   DiscoverTaskListPanel,
   SemanticUnderstandingTaskListPanel,
 } from "./TaskManagementTaskPanels";
 import styles from "./TaskManagementScene.module.css";
 
-type TaskManagementTab = "discover" | "index-build" | "semantic-understanding";
+type TaskManagementTab = "data-ingestion" | "discover" | "index-build" | "semantic-understanding";
 
 function resolveTaskManagementTab(value: string | null): TaskManagementTab {
-  if (value === "index-build" || value === "semantic-understanding") {
+  if (value === "data-ingestion" || value === "index-build" || value === "semantic-understanding") {
     return value;
   }
   return "discover";
@@ -50,6 +51,11 @@ export function TaskManagementScene() {
         activeKey={activeTab}
         className={styles.tabs}
         items={[
+          {
+            key: "data-ingestion",
+            label: t("dataCatalog.taskManagement.tabs.dataIngestion"),
+            children: <IngestionRunTaskPanel />,
+          },
           {
             key: "discover",
             label: t("dataCatalog.taskManagement.tabs.discover"),

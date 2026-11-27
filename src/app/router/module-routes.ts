@@ -14,6 +14,7 @@ import { apiKeysRouteContribution } from "@/modules/api-keys/routes";
 import { bknTraceRouteContribution } from "@/modules/bkn-trace/routes";
 import { dataCatalogRouteContribution } from "@/modules/data-catalog/routes";
 import { dataConnectRouteContribution } from "@/modules/data-connect/routes";
+import { dataIngestionRouteContribution } from "@/modules/data-ingestion/routes";
 import { executionFactoryLabRouteContribution } from "@/modules/execution-factory-lab/routes";
 import { executionFactoryRouteContribution } from "@/modules/execution-factory/routes";
 import { homeRouteContribution } from "@/modules/home/routes";
@@ -27,6 +28,7 @@ const routeContributions: AppRouteContribution[] = [
   knowledgeNetworkRouteContribution,
   dataCatalogRouteContribution,
   dataConnectRouteContribution,
+  dataIngestionRouteContribution,
   executionFactoryRouteContribution,
   modelResourcesRouteContribution,
   executionFactoryLabRouteContribution,

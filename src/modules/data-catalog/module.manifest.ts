@@ -33,6 +33,10 @@ export const dataCatalogModuleManifest = {
     "vega-backend/build-tasks",
     "vega-backend/discover-tasks",
     "vega-backend/semantic-understanding-tasks",
+    "data-ingestion/bootstrap",
+    "data-ingestion/spaces",
+    "data-ingestion/datasets",
+    "data-ingestion/runs",
   ],
   scenes: [
     {

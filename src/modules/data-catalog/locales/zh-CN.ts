@@ -9,6 +9,11 @@ export const dataCatalogZhCN = {
   dataCatalog: {
     title: "数据目录",
     description: "浏览与治理数据资源，按连接查看表、视图与索引状态。",
+    ingestionCatalog: {
+      name: "数据入库",
+      description: "统一展示通过数据入库生成的数据集及其记录。",
+      tag: "入库数据",
+    },
     permissionRequired: "当前账号权限不足，请联系管理员授权后再试。",
     loadErrorRefreshHint: "请稍后刷新页面再试。",
     catalogDetailTitle: "资源列表",
@@ -43,6 +48,8 @@ export const dataCatalogZhCN = {
     },
     resourceWorkspace: {
       currentResource: "当前资源",
+      openIngestionContract: "数据契约",
+      openIngestionProvenance: "入库溯源",
       tabDetail: "详情",
       tabPreview: "数据预览",
       tabIndex: "数据索引",
@@ -93,10 +100,13 @@ export const dataCatalogZhCN = {
     indexBuildDescription: "管理数据资源相关任务，支持任务查看，暂停，重启，删除等操作。",
     taskManagement: {
       tabs: {
+        dataIngestion: "数据入库任务",
         indexBuild: "索引构建任务",
         discover: "探查任务",
         semanticUnderstanding: "语义理解任务",
       },
+      ingestionRunsTitle: "数据入库任务（{{spaces}} 个数据空间）",
+      pipelineExecutionsTitle: "用户管线执行记录",
       columns: {
         task: "任务 ID",
         catalog: "所属目录",

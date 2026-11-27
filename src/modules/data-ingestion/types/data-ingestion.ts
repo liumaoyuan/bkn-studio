@@ -1,0 +1,547 @@
+/**
+ * Copyright (c) 2026 OpenBKN
+ * SPDX-License-Identifier: LicenseRef-OpenBKN
+ * Licensed under the OpenBKN License, a modified Apache 2.0 with Additional
+ * Conditions. See LICENSE for the full text.
+ */
+
+export type DataIngestionView =
+  "overview" | "import" | "pipelines" | "sources" | "catalog" | "auto-scan" | "agent";
+
+export type JsonObject = Record<string, unknown>;
+
+export interface DataIngestionControlDatabaseStatus {
+  configured: boolean;
+  initialized: boolean;
+  source: string;
+  database_label: string;
+  error: string;
+  bootstrap_enabled: boolean;
+}
+
+export interface DataIngestionControlDatabaseRequest {
+  database_url: string;
+  create_database: boolean;
+  bootstrap_database_url?: string;
+}
+
+export interface DataIngestionControlDatabaseTestResult {
+  connected: boolean;
+  database_exists: boolean;
+  database_name: string;
+  database_label: string;
+}
+
+export interface DataIngestionSpace {
+  id: string;
+  name: string;
+  slug: string;
+  database_label: string;
+  is_default: boolean;
+  status: string;
+  last_error: string;
+  created_at: string;
+}
+
+export interface DataIngestionDataSource {
+  id: string;
+  name: string;
+  source_type: string;
+  config: JsonObject;
+  status: string;
+  last_checked_at: string | null;
+  created_at: string;
+}
+
+export interface DataIngestionDatabaseTable {
+  name: string;
+  kind: "table" | "view";
+}
+
+export interface DataIngestionDatabaseColumn {
+  name: string;
+  type: string;
+  nullable: boolean;
+  primary_key: boolean;
+}
+
+export interface DataIngestionDatabaseCatalog {
+  schema_name: string;
+  tables: DataIngestionDatabaseTable[];
+  table_name: string;
+  columns: DataIngestionDatabaseColumn[];
+  primary_keys: string[];
+  recommended_watermark: string;
+  recommended_sync_mode: "full" | "incremental";
+  recommended_initial_cursor: string;
+  recommendation_reason: string;
+  generated_query: string;
+}
+
+export interface DataIngestionDataset {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  data_type: string;
+  target_table: string;
+  storage_mode?: "auto" | "shared" | "dedicated";
+  upsert_keys?: string[];
+  physical_table?: string;
+  partition_mode?: string;
+  record_count: number;
+  last_ingested_at: string | null;
+  created_at: string;
+}
+
+export interface DataIngestionStage {
+  id: string;
+  sequence: number;
+  stage_key: string;
+  name: string;
+  status: string;
+  input_count: number;
+  output_count: number;
+  duration_ms: number;
+  summary: JsonObject;
+  logs: string[];
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export interface DataIngestionPipelineTemplate {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  supported_types: string[];
+  steps: Array<{
+    key: string;
+    name: string;
+    kind: string;
+    description: string;
+    input: string;
+    output: string;
+    implementation: string;
+    parameters: JsonObject;
+    artifact: string;
+    retryable: boolean;
+    tool_name?: string;
+  }>;
+  enabled: boolean;
+}
+
+export interface DataIngestionPipelineRunResult {
+  execution_id?: string;
+  pipeline_code: string;
+  status: string;
+  results: Array<{
+    step: number;
+    key: string;
+    tool_name: string;
+    arguments?: JsonObject;
+    result: unknown;
+  }>;
+}
+
+export interface DataIngestionPipelineExecution {
+  id: string;
+  pipeline_code: string;
+  pipeline_name: string;
+  space_id: string;
+  status: string;
+  inputs: JsonObject;
+  step_inputs: JsonObject;
+  results: Array<{
+    step: number;
+    key: string;
+    tool_name: string;
+    arguments?: JsonObject;
+    result: unknown;
+  }>;
+  error_message: string;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string;
+}
+
+export interface DataIngestionCustomMcpTool {
+  id: string;
+  name: string;
+  display_name: string;
+  description: string;
+  read_only: boolean;
+  requires_approval: boolean;
+  tool_type: string;
+  config: JsonObject;
+  enabled: boolean;
+  built_in: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DataIngestionCustomSkill {
+  id: string;
+  name: string;
+  display_name: string;
+  description: string;
+  content: string;
+  enabled: boolean;
+  built_in: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DataIngestionRun {
+  id: string;
+  duplicate?: boolean;
+  dataset_id: string;
+  source_id: string | null;
+  template_code: string;
+  status: string;
+  original_name: string;
+  file_type: string;
+  media_type: string;
+  source_object: string;
+  source_context?: JsonObject | null;
+  file_size: number;
+  fingerprint: string;
+  fetched_count: number;
+  inserted_count: number;
+  updated_count: number;
+  duplicate_count: number;
+  error_count: number;
+  incremental_cursor_before: string;
+  incremental_cursor_after: string;
+  error_message: string;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string;
+  stages: DataIngestionStage[];
+}
+
+export type DataIngestionRunListItem = Omit<
+  DataIngestionRun,
+  "media_type" | "fingerprint" | "source_context" | "stages"
+>;
+
+export interface DataIngestionDatasetRecord {
+  id: string;
+  dataset_id: string;
+  run_id: string;
+  record_key?: string;
+  data_type: string;
+  payload: JsonObject;
+  asset_path: string;
+  source_id: string | null;
+  source_object: string;
+  source_locator?: JsonObject | null;
+  stable_record_id: string;
+  created_at: string;
+}
+
+export interface DataIngestionDatasetFieldSchema {
+  name: string;
+  data_type: string;
+  nullable: boolean;
+  present_count: number;
+  completeness: number;
+  sample_values: unknown[];
+  primary_key: boolean;
+}
+
+export interface DataIngestionDatasetSchema {
+  schema_version: string;
+  sampled_records: number;
+  total_records: number;
+  primary_key_fields: string[];
+  stable_key_strategy: "business_key" | "content_fingerprint";
+  fields: DataIngestionDatasetFieldSchema[];
+}
+
+export interface DataIngestionQualityIssue {
+  code: string;
+  severity: "warning" | "error";
+  field?: string;
+  message: string;
+}
+
+export interface DataIngestionQualityReport {
+  status: "passed" | "failed";
+  score: number;
+  scope: "sample";
+  sampled_records: number;
+  total_records: number;
+  field_count: number;
+  completeness: number;
+  duplicate_count: number;
+  error_count: number;
+  primary_key_fields: string[];
+  issues: DataIngestionQualityIssue[];
+}
+
+export interface DataIngestionQualityCheck {
+  id: string;
+  dataset_id: string;
+  status: "not_started" | "queued" | "running" | "completed" | "failed";
+  scope: "full";
+  total_records: number;
+  report: DataIngestionQualityReport | Record<string, never>;
+  error_message: string;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string | null;
+}
+
+export interface DataIngestionDatasetPublication {
+  dataset_id: string;
+  catalog_id: string;
+  resource_id: string;
+  status: string;
+  discovery_started: boolean;
+  last_error: string;
+  last_published_at: string | null;
+}
+
+export interface DataIngestionDatasetContract {
+  dataset: DataIngestionDataset;
+  schema: DataIngestionDatasetSchema;
+  quality: DataIngestionQualityReport;
+  publication: DataIngestionDatasetPublication;
+}
+
+export interface DataIngestionProvenanceBackfillResult {
+  dataset_id: string;
+  updated_records: number;
+  status: "completed";
+}
+
+export interface DataIngestionSheetPreview {
+  name: string;
+  index: number;
+  state: string;
+  is_active: boolean;
+  columns: string[];
+  rows: JsonObject[];
+  metadata: JsonObject;
+  warnings: string[];
+}
+
+export interface DataIngestionInspection {
+  filename: string;
+  file_type: string;
+  media_type: string;
+  size: number;
+  recommended_pipeline: string;
+  preview_type: string;
+  columns: string[];
+  rows: JsonObject[];
+  metadata: JsonObject;
+  warnings: string[];
+  sheets: DataIngestionSheetPreview[];
+}
+
+export interface DataIngestionOverview {
+  datasets: number;
+  records: number;
+  runs: number;
+  success_runs: number;
+  active_runs: number;
+  success_rate: number;
+  recent_runs: DataIngestionRunListItem[];
+}
+
+export interface DataIngestionStorageInfo {
+  backend: string;
+  space_id?: string;
+  space_name?: string;
+  root?: string;
+  endpoint?: string;
+  bucket?: string;
+  prefix?: string;
+  database_backend: string;
+  database_label?: string;
+  raw_storage: string;
+  artifact_storage: string;
+}
+
+export interface DataIngestionAutoScanJob {
+  id: string;
+  name: string;
+  source_id: string;
+  source_name: string;
+  source_type: string;
+  dataset_id: string;
+  dataset_name: string;
+  template_code: string;
+  scan_type: string;
+  path: string;
+  recursive: boolean;
+  file_pattern: string;
+  interval_seconds: number;
+  schedule_type: string;
+  schedule_time: string;
+  weekdays: number[];
+  cron_expression: string;
+  timezone: string;
+  enabled: boolean;
+  status: string;
+  last_scan_at: string | null;
+  next_scan_at: string | null;
+  last_error: string;
+  last_run_id: string | null;
+  processed_count: number;
+  scan_state: JsonObject;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DataIngestionAgentStatus {
+  configured: boolean;
+  managed_by: string;
+  default_model_id: string;
+  default_model_name: string;
+  error?: string;
+}
+
+export interface DataIngestionAgentManifest {
+  id: string;
+  name: string;
+  description: string;
+  preset: JsonObject;
+  mcp: JsonObject;
+  skill: JsonObject;
+  dsh: JsonObject;
+  permissions: JsonObject;
+  workflow: string[];
+  tools: Array<{
+    arguments?: Array<{
+      name: string;
+      type: string;
+      required?: boolean;
+    }>;
+    built_in?: boolean;
+    config?: JsonObject;
+    id?: string;
+    name: string;
+    display_name: string;
+    description: string;
+    locked?: boolean;
+    read_only: boolean;
+    requires_approval: boolean;
+    qualifiedName?: string;
+    returns?: string;
+  }>;
+}
+
+export interface DataIngestionAgentSkill {
+  name: string;
+  path: string;
+  content: string;
+  loaded: boolean;
+  built_in?: boolean;
+  locked?: boolean;
+  custom?: DataIngestionCustomSkill[];
+}
+
+export interface DataIngestionAgentSession {
+  id: string;
+  title: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DataIngestionAgentMessage {
+  id: string;
+  role: string;
+  content: string;
+  attachments: DataIngestionAgentAttachment[];
+  tool_calls: JsonObject[];
+  tool_call_id: string;
+  name: string;
+  created_at: string;
+}
+
+export interface DataIngestionAgentAttachment {
+  id: string;
+  filename: string;
+  file_type: string;
+  media_type: string;
+  recommended_pipeline: string;
+  sha256: string;
+  size: number;
+  file_path: string;
+}
+
+export interface DataIngestionAgentApproval {
+  id: string;
+  session_id: string;
+  message_id: string;
+  tool_call_id: string;
+  tool_name: string;
+  arguments: JsonObject;
+  status: string;
+  reason: string;
+  result: JsonObject;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+export interface DataIngestionAgentMemory {
+  id: string;
+  memory_key: string;
+  value: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DataIngestionAgentSessionDetail extends DataIngestionAgentSession {
+  messages: DataIngestionAgentMessage[];
+  approvals: DataIngestionAgentApproval[];
+  memories: DataIngestionAgentMemory[];
+}
+
+export type DataIngestionAgentStreamEvent =
+  | {
+      type: "assistant_delta" | "content_delta" | "reasoning_delta";
+      content: string;
+      round: number;
+    }
+  | { type: "assistant_start"; round: number }
+  | {
+      type: "assistant_message";
+      round: number;
+      message: {
+        id: string;
+        role: "assistant";
+        content: string;
+        tool_calls: JsonObject[];
+      };
+    }
+  | {
+      type: "approval_resolved";
+      approval_id: string;
+      status: string;
+    }
+  | {
+      type: "approvals_created";
+      approvals: Array<{
+        id: string;
+        tool_name: string;
+        arguments: JsonObject;
+      }>;
+    }
+  | {
+      type: "done" | "error" | "status" | "tool_result" | "tool_start" | "user_message";
+      [key: string]: unknown;
+    }
+  | {
+      type: "session";
+      session: DataIngestionAgentSessionDetail;
+    };
+
+export interface DataIngestionAgentStreamResult {
+  error: string;
+  session: DataIngestionAgentSessionDetail | null;
+}

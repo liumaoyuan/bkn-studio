@@ -101,6 +101,28 @@
   border-color: #2e68ff !important;
 }
 
+.ingestionSection {
+  margin: 14px 14px 0;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-bg-surface);
+}
+
+.ingestionHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-subtle, var(--color-bg-surface));
+}
+
+.ingestionSection :global(.ant-alert) {
+  margin: 14px;
+}
+
 .tableSurface {
   composes: tableSurface from "../../../framework/ui/common/BusinessPageTemplate.module.css";
 }
